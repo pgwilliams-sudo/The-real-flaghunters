@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, viewport-fit=cover"
+  >
+
+  <meta
+    name="theme-color"
+    content="#173f2a"
+  >
+
+  <title>The Real Flag Hunters</title>
+
+  <style>
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: #f4f6f2;
+      color: #17231c;
+      font-family:
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        sans-serif;
+    }
+
+    .wrap {
+      max-width: 720px;
+      margin: auto;
+      padding: 18px;
+    }
+
+    .hero {
+      text-align: center;
+      padding: 30px 16px 18px;
+    }
+
+    .flag {
+      font-size: 48px;
+    }
+
+    .hero h1 {
+      margin: 6px 0;
+      font-size: 30px;
+    }
+
+    .hero p,
+    .meta,
+    .status {
+      color: #68766d;
+    }
+
+    .card {
+      background: white;
+      border-radius: 18px;
+      padding: 18px;
+      margin: 14px 0;
+      box-shadow: 0 3px 14px #0001;
+    }
+
+    .actions {
+      display: grid;
+      gap: 14px;
+    }
+
+    .btn {
+      border: 0;
+      border-radius: 16px;
+      padding: 20px 14px;
+      width: 100%;
+      font-size: 19px;
+      font-weight: 750;
+    }
+
+    .primary {
+      background: #173f2a;
+      color: white;
+    }
+
+    .secondary {
+      background: #e3ebe5;
+      color: #173f2a;
+    }
+
+    .small {
+      padding: 12px;
+      font-size: 15px;
+    }
+
+    .status {
+      text-align: center;
+      font-size: 13px;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    .nav {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .nav button {
+      border: 0;
+      border-radius: 999px;
+      padding: 10px 13px;
+    }
+
+    .hole {
+      font-size: 28px;
+      font-weight: 800;
+    }
+
+    .meta {
+      font-size: 13px;
+    }
+
+    .score-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      padding: 13px 0;
+      border-bottom: 1px solid #eee;
+    }
+
+    .step {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+    }
+
+    .step button {
+      width: 44px;
+      height: 44px;
+      border: 0;
+      border-radius: 12px;
+      font-size: 23px;
+    }
+
+    .score {
+      width: 30px;
+      text-align: center;
+      font-size: 21px;
+      font-weight: 750;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th,
+    td {
+      padding: 10px 5px;
+      border-bottom: 1px solid #e6ebe7;
+      text-align: right;
+    }
+
+    th:first-child,
+    td:first-child {
+      text-align: left;
+    }
+
+    .season .btn {
+      margin-top: 8px;
+    }
+
+    @media (min-width: 600px) {
+
+      .actions {
+        grid-template-columns: 1fr 1fr;
+      }
+
+    }
+
+  </style>
+
+</head>
+
+<body>
+
+  <main class="wrap">
+
+    <!-- HOME SCREEN -->
+
+    <section id="home">
+
+      <div class="hero">
+
+        <div class="flag">
+          ⛳
+        </div>
+
+        <h1>
+          The Real Flag Hunters
+        </h1>
+
+        <p>
+          Saturday Golf · Brickendon Grange
+        </p>
+
+      </div>
+
+      <div class="card actions">
+
+        <button
+          class="btn primary"
+          onclick="show('scoring')"
+        >
+          Enter Scores
+        </button>
+
+        <button
+          class="btn secondary"
+          onclick="show('leaderboard')"
+        >
+          View Live Leaderboard
+        </button>
+
+      </div>
+
+      <div class="card">
+
+        <button
+          class="btn small secondary"
+          onclick="show('season')"
+        >
+          Season
+        </button>
+
+      </div>
+
+      <div class="status">
+        ● App loaded
+      </div>
+
+    </section>
+
+
+    <!-- SCORING SCREEN -->
+
+    <section
+      id="scoring"
+      class="hidden"
+    >
+
+      <div class="nav">
+
+        <button onclick="show('home')">
+          Home
+        </button>
+
+        <button onclick="show('leaderboard')">
+          Leaderboard
+        </button>
+
+      </div>
+
+      <div class="card">
+
+        <div class="meta">
+          Brickendon Grange · White tees
+        </div>
+
+        <div
+          class="hole"
+          id="holeTitle"
+        >
+        </div>
+
+        <div
+          class="meta"
+          id="holeMeta"
+        >
+        </div>
+
+        <div id="players">
+        </div>
+
+        <button
+          class="btn primary"
+          style="margin-top: 16px"
+          id="nextBtn"
+          onclick="nextHole()"
+        >
+          Next Hole
+        </button>
+
+      </div>
+
+    </section>
+
+
+    <!-- LEADERBOARD SCREEN -->
+
+    <section
+      id="leaderboard"
+      class="hidden"
+    >
+
+      <div class="nav">
+
+        <button onclick="show('home')">
+          Home
+        </button>
+
+        <button onclick="show('scoring')">
+          Enter Scores
+        </button>
+
+      </div>
+
+      <div class="card">
+
+        <h2>
+          Live Leaderboard
+        </h2>
+
+        <table>
+
+          <thead>
+
+            <tr>
+
+              <th>
+                Player
+              </th>
+
+              <th>
+                Gross
+              </th>
+
+              <th>
+                Net
+              </th>
+
+              <th>
+                Pts
+              </th>
+
+            </tr>
+
+          </thead>
+
+          <tbody id="board">
+          </tbody>
+
+        </table>
+
+        <p class="meta">
+          Google Sheets live connection comes next.
+        </p>
+
+      </div>
+
+    </section>
+
+
+    <!-- SEASON SCREEN -->
+
+    <section
+      id="season"
+      class="hidden"
+    >
+
+      <div class="nav">
+
+        <button onclick="show('home')">
+          Home
+        </button>
+
+      </div>
+
+      <div class="card season">
+
+        <h2>
+          Season
+        </h2>
+
+        <p>
+          <b>
+            Player of the Year
+          </b>
+        </p>
+
+        <p class="meta">
+          Weekly Stableford ranking awards
+          5, 4, 3, 2, 1 points to the top five.
+        </p>
+
+        <button class="btn small secondary">
+          Gross Eclectic
+        </button>
+
+        <button class="btn small secondary">
+          Net Eclectic
+        </button>
+
+        <button class="btn small secondary">
+          Winnings
+        </button>
+
+      </div>
+
+    </section>
+
+  </main>
+
+
+  <script>
+
+    const names = [
+      "Pete",
+      "Player 2",
+      "Player 3",
+      "Player 4"
+    ];
+
+
+    const course = [
+
+      [5, 6, 513],
+
+      [4, 11, 339],
+
+      [4, 18, 337],
+
+      [4, 2, 452],
+
+      [4, 8, 366],
+
+      [3, 14, 175],
+
+      [4, 4, 373],
+
+      [4, 16, 358],
+
+      [3, 12, 179],
+
+      [4, 9, 328],
+
+      [3, 15, 199],
+
+      [4, 3, 427],
+
+      [5, 13, 523],
+
+      [4, 5, 381],
+
+      [5, 17, 497],
+
+      [4, 1, 420],
+
+      [4, 7, 417],
+
+      [3, 10, 174]
+
+    ];
+
+
+    let hole = 1;
+
+
+    let scores = Array(4).fill(5);
+
+
+    function show(id) {
+
+      document
+        .querySelectorAll("main > section")
+        .forEach(
+          section =>
+            section.classList.add("hidden")
+        );
+
+
+      document
+        .getElementById(id)
+        .classList.remove("hidden");
+
+
+      if (id === "scoring") {
+        render();
+      }
+
+
+      if (id === "leaderboard") {
+        board();
+      }
+
+    }
+
+
+    function render() {
+
+      const currentHole =
+        course[hole - 1];
+
+
+      document
+        .getElementById("holeTitle")
+        .textContent =
+          "Hole " + hole;
+
+
+      document
+        .getElementById("holeMeta")
+        .textContent =
+          `Par ${currentHole[0]} · SI ${currentHole[1]} · ${currentHole[2]} yds`;
+
+
+      document
+        .getElementById("players")
+        .innerHTML =
+          names.map(
+
+            (name, index) => `
+
+              <div class="score-row">
+
+                <div>
+
+                  <b>
+                    ${name}
+                  </b>
+
+                  <div class="meta">
+                    Gross score
+                  </div>
+
+                </div>
+
+                <div class="step">
+
+                  <button
+                    onclick="change(${index}, -1)"
+                  >
+                    −
+                  </button>
+
+                  <span class="score">
+                    ${scores[index]}
+                  </span>
+
+                  <button
+                    onclick="change(${index}, 1)"
+                  >
+                    +
+                  </button>
+
+                </div>
+
+              </div>
+
+            `
+
+          ).join("");
+
+
+      document
+        .getElementById("nextBtn")
+        .textContent =
+          hole === 18
+            ? "Complete Round"
+            : "Next Hole";
+
+    }
+
+
+    function change(index, amount) {
+
+      scores[index] =
+        Math.max(
+          1,
+          scores[index] + amount
+        );
+
+
+      render();
+
+    }
+
+
+    function nextHole() {
+
+      if (hole < 18) {
+
+        hole++;
+
+
+        scores =
+          Array(4).fill(
+            course[hole - 1][0]
+          );
+
+
+        render();
+
+      }
+
+      else {
+
+        alert(
+          "Round complete"
+        );
+
+      }
+
+    }
+
+
+    function board() {
+
+      document
+        .getElementById("board")
+        .innerHTML =
+          names.map(
+
+            name => `
+
+              <tr>
+
+                <td>
+                  ${name}
+                </td>
+
+                <td>
+                  –
+                </td>
+
+                <td>
+                  –
+                </td>
+
+                <td>
+                  –
+                </td>
+
+              </tr>
+
+            `
+
+          ).join("");
+
+    }
+
+
+    render();
+
+  </script>
+
+</body>
+
+</html>
