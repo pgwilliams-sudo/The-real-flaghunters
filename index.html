@@ -2,6 +2,7 @@
 <html lang="en">
 
 <head>
+
   <meta charset="UTF-8">
 
   <meta
@@ -11,10 +12,13 @@
 
   <meta
     name="theme-color"
-    content="#173f2a"
+    content="#163c2b"
   >
 
-  <title>The Real Flag Hunters</title>
+  <title>
+    The Real Flag Hunters
+  </title>
+
 
   <style>
 
@@ -24,181 +28,442 @@
 
     body {
       margin: 0;
-      background: #f4f6f2;
-      color: #17231c;
       font-family:
         -apple-system,
         BlinkMacSystemFont,
         "Segoe UI",
         sans-serif;
+      background: #f4f5f2;
+      color: #172019;
     }
 
-    .wrap {
-      max-width: 760px;
-      margin: auto;
+    button,
+    input,
+    select {
+      font: inherit;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    .app {
+      max-width: 700px;
+      margin: 0 auto;
+      min-height: 100vh;
+      background: #f4f5f2;
+    }
+
+    .header {
+      background: #163c2b;
+      color: white;
+      padding:
+        calc(18px + env(safe-area-inset-top))
+        20px
+        20px;
+      text-align: center;
+    }
+
+    .header h1 {
+      margin: 0;
+      font-size: 27px;
+    }
+
+    .header p {
+      margin: 6px 0 0;
+      opacity: .8;
+      font-size: 14px;
+    }
+
+    .screen {
+      display: none;
       padding: 18px;
+      padding-bottom:
+        calc(30px + env(safe-area-inset-bottom));
+    }
+
+    .screen.active {
+      display: block;
+    }
+
+    .card {
+      background: white;
+      border-radius: 16px;
+      padding: 18px;
+      margin-bottom: 15px;
+      box-shadow:
+        0 2px 10px
+        rgba(0,0,0,.06);
+    }
+
+    .menu-button {
+      width: 100%;
+      border: 0;
+      border-radius: 16px;
+      padding: 22px 18px;
+      margin-bottom: 14px;
+      background: white;
+      text-align: left;
+      box-shadow:
+        0 2px 10px
+        rgba(0,0,0,.06);
+    }
+
+    .menu-button strong {
+      display: block;
+      font-size: 20px;
+      margin-bottom: 5px;
+    }
+
+    .menu-button span {
+      color: #657168;
+      font-size: 14px;
+    }
+
+    .menu-button.primary {
+      background: #163c2b;
+      color: white;
+    }
+
+    .menu-button.primary span {
+      color: #d8e4dc;
+    }
+
+    .section-title {
+      font-size: 22px;
+      font-weight: 750;
+      margin:
+        2px 0 16px;
+    }
+
+    .sub-title {
+      font-size: 17px;
+      font-weight: 700;
+      margin:
+        4px 0 12px;
+    }
+
+    .back {
+      border: 0;
+      background: none;
+      padding: 0;
+      margin-bottom: 14px;
+      font-weight: 650;
+      color: #163c2b;
+    }
+
+    .primary-button,
+    .secondary-button,
+    .danger-button {
+      width: 100%;
+      min-height: 52px;
+      border-radius: 12px;
+      font-weight: 700;
+      margin-top: 10px;
+    }
+
+    .primary-button {
+      border: 0;
+      background: #163c2b;
+      color: white;
+    }
+
+    .secondary-button {
+      background: white;
+      border: 1px solid #b9c4bd;
+      color: #163c2b;
+    }
+
+    .danger-button {
+      background: #fff7f7;
+      border: 1px solid #d49a9a;
+      color: #8b2222;
+    }
+
+    .field {
+      margin-bottom: 15px;
+    }
+
+    .field label {
+      display: block;
+      font-weight: 650;
+      margin-bottom: 6px;
+    }
+
+    input[type="text"],
+    input[type="password"],
+    input[type="number"],
+    input[type="date"],
+    select {
+      width: 100%;
+      min-height: 48px;
+      border-radius: 10px;
+      border: 1px solid #c5cec7;
+      padding: 10px 12px;
+      background: white;
+    }
+
+    .message {
+      padding: 12px 14px;
+      border-radius: 10px;
+      margin: 12px 0;
+      font-size: 14px;
+    }
+
+    .message.good {
+      background: #e8f4ec;
+      color: #165328;
+    }
+
+    .message.bad {
+      background: #fff0f0;
+      color: #8b2222;
+    }
+
+    .message.info {
+      background: #eef2f6;
+      color: #36424d;
     }
 
     .hidden {
       display: none !important;
     }
 
-    .hero {
-      text-align: center;
-      padding: 28px 14px 16px;
-    }
-
-    .flag {
-      font-size: 48px;
-    }
-
-    h1 {
-      margin: 5px 0;
-      font-size: 30px;
-    }
-
-    h2 {
-      margin-top: 4px;
-    }
-
-    h3 {
-      margin-bottom: 8px;
-    }
-
-    .meta {
-      color: #68766d;
-      font-size: 14px;
-    }
-
-    .status {
-      text-align: center;
-      color: #68766d;
-      font-size: 13px;
-      margin-top: 10px;
-    }
-
-    .card {
-      background: white;
-      border-radius: 18px;
-      padding: 18px;
-      margin: 14px 0;
-      box-shadow: 0 3px 14px #0001;
-    }
-
-    .actions {
+    .player-select-row {
       display: grid;
-      gap: 14px;
+      grid-template-columns:
+        30px 1fr 88px;
+      gap: 10px;
+      align-items: center;
+      padding: 11px 0;
+      border-bottom: 1px solid #edf0ed;
     }
 
-    .btn {
-      border: 0;
-      border-radius: 16px;
-      padding: 18px 14px;
-      width: 100%;
-      font-size: 18px;
-      font-weight: 750;
-      cursor: pointer;
+    .player-select-row:last-child {
+      border-bottom: 0;
     }
 
-    .primary {
-      background: #173f2a;
-      color: white;
+    .player-select-row input[type="checkbox"] {
+      width: 22px;
+      height: 22px;
     }
 
-    .secondary {
-      background: #e3ebe5;
-      color: #173f2a;
+    .player-select-row input[type="number"] {
+      min-height: 40px;
+      padding: 7px;
     }
 
-    .danger {
-      background: #862b2b;
-      color: white;
-    }
-
-    .small {
-      padding: 11px 13px;
-      font-size: 15px;
-    }
-
-    .nav {
+    .toggle-row {
       display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .toggle-row input {
+      width: 22px;
+      height: 22px;
+    }
+
+    .draw-group {
+      border:
+        1px solid #dce2dd;
+      border-radius: 14px;
+      padding: 14px;
       margin-bottom: 12px;
     }
 
-    .nav button {
-      border: 0;
-      border-radius: 999px;
-      padding: 10px 13px;
-      background: #e3ebe5;
-      color: #173f2a;
+    .draw-group-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      font-weight: 750;
+      font-size: 18px;
     }
 
-    .event-banner {
-      background: #e8f2eb;
+    .start-select {
+      width: auto;
+      min-height: 38px;
+      padding: 6px 8px;
+    }
+
+    .draw-player {
+      display: grid;
+      grid-template-columns:
+        1fr 74px 92px;
+      gap: 8px;
+      align-items: center;
+      padding: 9px 0;
+      border-top:
+        1px solid #edf0ed;
+    }
+
+    .draw-player:first-of-type {
+      border-top: 0;
+    }
+
+    .small-label {
+      font-size: 12px;
+      color: #667169;
+    }
+
+    .scorer-radio {
+      text-align: center;
+      font-size: 12px;
+    }
+
+    .scorer-radio input {
+      width: 20px;
+      height: 20px;
+    }
+
+    .group-button {
+      border: 1px solid #d8ded9;
+      background: white;
+      width: 100%;
+      padding: 17px;
       border-radius: 14px;
-      padding: 12px;
-      margin-top: 10px;
+      margin-bottom: 11px;
+      text-align: left;
     }
 
-    .group-card {
-      border: 2px solid #dfe7e1;
-      border-radius: 16px;
-      padding: 14px;
-      margin: 12px 0;
-      cursor: pointer;
+    .group-button strong {
+      font-size: 18px;
+      display: block;
+      margin-bottom: 4px;
     }
 
-    .group-card:hover {
-      border-color: #173f2a;
+    .group-button span {
+      color: #68736b;
+      font-size: 14px;
     }
 
-    .hole {
-      font-size: 30px;
+    .hole-header {
+      text-align: center;
+      margin-bottom: 15px;
+    }
+
+    .hole-number {
+      font-size: 38px;
       font-weight: 800;
+    }
+
+    .hole-meta {
+      color: #687169;
       margin-top: 4px;
     }
 
-    .score-row {
+    .progress {
+      width: 100%;
+      height: 8px;
+      background: #dde2de;
+      border-radius: 99px;
+      overflow: hidden;
+      margin-top: 14px;
+    }
+
+    .progress-inner {
+      height: 100%;
+      background: #163c2b;
+      transition: width .2s;
+    }
+
+    .score-player {
+      background: white;
+      border-radius: 15px;
+      margin-bottom: 13px;
+      padding: 14px;
+      box-shadow:
+        0 2px 8px
+        rgba(0,0,0,.05);
+    }
+
+    .score-player-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: start;
+      margin-bottom: 10px;
+    }
+
+    .score-player-name {
+      font-size: 18px;
+      font-weight: 750;
+    }
+
+    .stroke-info {
+      text-align: right;
+      font-size: 13px;
+      color: #657068;
+    }
+
+    .quick-scores {
       display: grid;
-      grid-template-columns: 1fr auto;
+      grid-template-columns:
+        repeat(5, 1fr);
+      gap: 6px;
+      margin-top: 10px;
+    }
+
+    .quick-score {
+      min-height: 45px;
+      border: 1px solid #ccd4ce;
+      background: #f8f9f7;
+      border-radius: 9px;
+      font-weight: 700;
+    }
+
+    .quick-score.selected {
+      border: 2px solid #163c2b;
+      background: #e6efe9;
+    }
+
+    .score-adjust {
+      display: grid;
+      grid-template-columns:
+        55px 1fr 55px;
       gap: 8px;
       align-items: center;
-      padding: 14px 0;
-      border-bottom: 1px solid #eee;
+      margin-top: 10px;
     }
 
-    .step {
-      display: flex;
-      align-items: center;
-      gap: 9px;
-    }
-
-    .step button {
-      width: 46px;
-      height: 46px;
+    .adjust-button {
+      min-height: 45px;
       border: 0;
-      border-radius: 12px;
-      font-size: 24px;
+      border-radius: 10px;
+      background: #e9ece9;
+      font-size: 25px;
+      font-weight: 700;
     }
 
-    .score {
-      width: 32px;
+    .score-display {
       text-align: center;
-      font-size: 23px;
-      font-weight: 800;
+      font-size: 17px;
+      font-weight: 750;
     }
 
-    .score-empty {
-      color: #aaa;
+    .points-preview {
+      text-align: center;
+      margin-top: 8px;
+      min-height: 20px;
+      font-size: 14px;
+      color: #4f5c52;
     }
 
-    .hole-nav {
+    .scorer-banner {
+      background: #e8efe9;
+      padding: 10px 12px;
+      border-radius: 10px;
+      font-size: 14px;
+      margin-bottom: 15px;
+    }
+
+    .nav-buttons {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns:
+        1fr 2fr;
       gap: 10px;
-      margin-top: 14px;
+      margin-top: 8px;
     }
 
     table {
@@ -208,9 +473,11 @@
 
     th,
     td {
+      text-align: center;
       padding: 10px 5px;
-      border-bottom: 1px solid #e6ebe7;
-      text-align: right;
+      border-bottom:
+        1px solid #e8ece9;
+      font-size: 14px;
     }
 
     th:first-child,
@@ -218,71 +485,66 @@
       text-align: left;
     }
 
-    input,
-    select {
-      width: 100%;
-      font-size: 16px;
-      padding: 11px;
-      border-radius: 10px;
-      border: 1px solid #ccd4ce;
-      background: white;
+    th {
+      font-size: 12px;
+      color: #657068;
     }
 
-    label {
-      display: block;
+    .leader-name {
       font-weight: 650;
-      margin: 12px 0 5px;
     }
 
-    .player-setup {
-      border-top: 1px solid #eee;
-      padding: 14px 0;
+    .leader-pos {
+      display: inline-block;
+      width: 22px;
+      color: #657068;
     }
 
-    .setup-grid {
-      display: grid;
-      grid-template-columns: 1fr 85px 100px;
-      gap: 8px;
-      margin-top: 8px;
+    .big-points {
+      font-size: 17px;
+      font-weight: 800;
     }
 
-    .checkbox-line {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      margin-top: 8px;
+    .leader-meta {
+      color: #6c756f;
+      font-size: 11px;
+      display: block;
     }
 
-    .checkbox-line input {
-      width: auto;
+    .refresh-note {
+      text-align: center;
+      color: #7a837d;
+      font-size: 12px;
+      margin-top: 10px;
     }
 
-    .message {
-      padding: 12px;
-      border-radius: 12px;
-      margin: 12px 0;
-      background: #edf2ee;
+    .complete-card {
+      text-align: center;
+      padding: 30px 18px;
     }
 
-    .error {
-      background: #f8e4e4;
-      color: #702020;
+    .complete-card h2 {
+      font-size: 28px;
+      margin-top: 0;
     }
 
-    .success {
-      background: #e4f4e7;
-      color: #1c5b2c;
-    }
+    @media (max-width: 430px) {
 
-    .saving {
-      opacity: 0.6;
-      pointer-events: none;
-    }
+      .screen {
+        padding: 14px;
+      }
 
-    @media (min-width: 600px) {
+      .quick-scores {
+        gap: 4px;
+      }
 
-      .actions {
-        grid-template-columns: 1fr 1fr;
+      .quick-score {
+        font-size: 14px;
+      }
+
+      .draw-player {
+        grid-template-columns:
+          1fr 66px 78px;
       }
 
     }
@@ -291,292 +553,327 @@
 
 </head>
 
+
 <body>
 
-  <main class="wrap">
+<div class="app">
 
-    <!-- HOME -->
 
-    <section id="home">
+  <header class="header">
 
-      <div class="hero">
+    <h1>
+      The Real Flag Hunters
+    </h1>
 
-        <div class="flag">
-          ⛳
-        </div>
+    <p id="headerStatus">
+      Saturday Golf
+    </p>
 
-        <h1>
-          The Real Flag Hunters
-        </h1>
+  </header>
 
-        <p class="meta">
-          Saturday Golf · Brickendon Grange
-        </p>
 
-        <div
-          id="homeEvent"
-          class="event-banner"
-        >
-          Checking today's round...
-        </div>
 
-      </div>
+  <!-- HOME -->
 
-      <div class="card actions">
+  <main
+    id="homeScreen"
+    class="screen active"
+  >
 
-        <button
-          class="btn primary"
-          onclick="openScoring()"
-        >
-          Enter Scores
-        </button>
+    <button
+      class="menu-button primary"
+      onclick="openScoring()"
+    >
 
-        <button
-          class="btn secondary"
-          onclick="openLeaderboard()"
-        >
-          Live Leaderboard
-        </button>
+      <strong>
+        ⛳ Enter Scores
+      </strong>
 
-      </div>
+      <span>
+        Score your group hole by hole
+      </span>
 
-      <div class="card actions">
+    </button>
 
-        <button
-          class="btn secondary"
-          onclick="show('season')"
-        >
-          Season
-        </button>
 
-        <button
-          class="btn secondary"
-          onclick="openAdmin()"
-        >
-          Admin Setup
-        </button>
+    <button
+      class="menu-button"
+      onclick="openLeaderboard()"
+    >
 
-      </div>
+      <strong>
+        🏆 Live Leaderboard
+      </strong>
 
-      <div
-        id="connectionStatus"
-        class="status"
+      <span>
+        Gross, net and Stableford
+      </span>
+
+    </button>
+
+
+    <button
+      class="menu-button"
+      onclick="openSeason()"
+    >
+
+      <strong>
+        📊 Season
+      </strong>
+
+      <span>
+        Eclectics, POTY and statistics
+      </span>
+
+    </button>
+
+
+    <button
+      class="menu-button"
+      onclick="openAdmin()"
+    >
+
+      <strong>
+        ⚙️ Admin Setup
+      </strong>
+
+      <span>
+        Set up Saturday's round
+      </span>
+
+    </button>
+
+
+    <div
+      id="homeMessage"
+      class="message info hidden"
+    ></div>
+
+  </main>
+
+
+
+  <!-- GROUP SELECT -->
+
+  <main
+    id="groupScreen"
+    class="screen"
+  >
+
+    <button
+      class="back"
+      onclick="showScreen('homeScreen')"
+    >
+      ← Home
+    </button>
+
+    <div class="section-title">
+      Choose your group
+    </div>
+
+    <div id="groupList"></div>
+
+  </main>
+
+
+
+  <!-- SCORING -->
+
+  <main
+    id="scoreScreen"
+    class="screen"
+  >
+
+    <button
+      class="back"
+      onclick="returnToGroups()"
+    >
+      ← Groups
+    </button>
+
+    <div
+      id="scorerBanner"
+      class="scorer-banner"
+    ></div>
+
+    <div
+      class="hole-header"
+      id="holeHeader"
+    ></div>
+
+    <div id="scorePlayers"></div>
+
+    <div class="nav-buttons">
+
+      <button
+        class="secondary-button"
+        onclick="previousHole()"
       >
-        Connecting...
-      </div>
+        Previous
+      </button>
 
-    </section>
+      <button
+        id="nextButton"
+        class="primary-button"
+        onclick="saveAndNext()"
+      >
+        Save & Next
+      </button>
+
+    </div>
+
+    <div
+      id="scoreMessage"
+      class="message hidden"
+    ></div>
+
+  </main>
 
 
-    <!-- GROUP SELECT -->
 
-    <section
-      id="groupSelect"
-      class="hidden"
+  <!-- COMPLETE -->
+
+  <main
+    id="completeScreen"
+    class="screen"
+  >
+
+    <div class="card complete-card">
+
+      <h2>
+        Round complete ⛳
+      </h2>
+
+      <p>
+        All 18 holes have been recorded
+        for your group.
+      </p>
+
+      <button
+        class="primary-button"
+        onclick="openLeaderboard()"
+      >
+        View Leaderboard
+      </button>
+
+      <button
+        class="secondary-button"
+        onclick="showScreen('homeScreen')"
+      >
+        Home
+      </button>
+
+    </div>
+
+  </main>
+
+
+
+  <!-- LEADERBOARD -->
+
+  <main
+    id="leaderboardScreen"
+    class="screen"
+  >
+
+    <button
+      class="back"
+      onclick="closeLeaderboard()"
     >
+      ← Home
+    </button>
 
-      <div class="nav">
+    <div class="section-title">
+      Live Leaderboard
+    </div>
 
-        <button onclick="show('home')">
-          Home
-        </button>
+    <div
+      id="leaderEvent"
+      class="message info hidden"
+    ></div>
 
-        <button onclick="openLeaderboard()">
-          Leaderboard
-        </button>
+    <div class="card">
 
+      <div id="leaderboardTable">
+        Loading…
       </div>
 
-      <div class="card">
+    </div>
 
-        <h2>
-          Choose your group
-        </h2>
+    <div class="refresh-note">
+      Updates automatically
+    </div>
 
-        <div
-          id="groupList"
-          class="meta"
-        >
-          Loading groups...
-        </div>
-
-      </div>
-
-    </section>
+  </main>
 
 
-    <!-- SCORING -->
 
-    <section
-      id="scoring"
-      class="hidden"
+  <!-- SEASON -->
+
+  <main
+    id="seasonScreen"
+    class="screen"
+  >
+
+    <button
+      class="back"
+      onclick="showScreen('homeScreen')"
     >
+      ← Home
+    </button>
 
-      <div class="nav">
+    <div class="section-title">
+      Season
+    </div>
 
-        <button onclick="show('groupSelect')">
-          Groups
-        </button>
+    <div class="card">
 
-        <button onclick="openLeaderboard()">
-          Leaderboard
-        </button>
-
-        <button onclick="show('home')">
-          Home
-        </button>
-
+      <div class="sub-title">
+        Coming next
       </div>
 
-      <div class="card">
+      <p>
+        Completed Saturday rounds will feed
+        the Gross Eclectic, Net Eclectic,
+        POTY, appearances, Stableford averages,
+        blobs, birdies and eagles.
+      </p>
 
-        <div
-          class="meta"
-          id="scoreEventMeta"
-        >
-        </div>
+      <p class="small-label">
+        Weekly scoring is being tested first
+        before we let an eclectic spreadsheet
+        acquire consciousness.
+      </p>
 
-        <div
-          class="hole"
-          id="holeTitle"
-        >
-        </div>
+    </div>
 
-        <div
-          class="meta"
-          id="holeMeta"
-        >
-        </div>
-
-        <div id="players">
-        </div>
-
-        <div
-          id="scoreMessage"
-        >
-        </div>
-
-        <div class="hole-nav">
-
-          <button
-            class="btn secondary"
-            onclick="previousHole()"
-          >
-            Previous
-          </button>
-
-          <button
-            class="btn primary"
-            id="nextBtn"
-            onclick="saveAndNext()"
-          >
-            Save & Next
-          </button>
-
-        </div>
-
-      </div>
-
-    </section>
+  </main>
 
 
-    <!-- LEADERBOARD -->
 
-    <section
-      id="leaderboard"
-      class="hidden"
+  <!-- ADMIN LOGIN -->
+
+  <main
+    id="adminLoginScreen"
+    class="screen"
+  >
+
+    <button
+      class="back"
+      onclick="showScreen('homeScreen')"
     >
+      ← Home
+    </button>
 
-      <div class="nav">
+    <div class="section-title">
+      Admin
+    </div>
 
-        <button onclick="show('home')">
-          Home
-        </button>
+    <div class="card">
 
-        <button onclick="openScoring()">
-          Enter Scores
-        </button>
+      <div class="field">
 
-      </div>
-
-      <div class="card">
-
-        <h2>
-          Live Leaderboard
-        </h2>
-
-        <div
-          id="leaderboardEvent"
-          class="meta"
-        >
-        </div>
-
-        <table>
-
-          <thead>
-
-            <tr>
-
-              <th>
-                Player
-              </th>
-
-              <th>
-                H
-              </th>
-
-              <th>
-                Gross
-              </th>
-
-              <th>
-                Net
-              </th>
-
-              <th>
-                Pts
-              </th>
-
-            </tr>
-
-          </thead>
-
-          <tbody id="board">
-          </tbody>
-
-        </table>
-
-        <div class="status">
-          Refreshes automatically
-        </div>
-
-      </div>
-
-    </section>
-
-
-    <!-- ADMIN LOGIN -->
-
-    <section
-      id="adminLogin"
-      class="hidden"
-    >
-
-      <div class="nav">
-
-        <button onclick="show('home')">
-          Home
-        </button>
-
-      </div>
-
-      <div class="card">
-
-        <h2>
-          Admin
-        </h2>
-
-        <label for="adminPin">
+        <label>
           Admin PIN
         </label>
 
@@ -587,46 +884,54 @@
           autocomplete="off"
         >
 
-        <button
-          class="btn primary"
-          style="margin-top: 14px"
-          onclick="adminLogin()"
-        >
-          Sign In
-        </button>
-
-        <div
-          id="adminLoginMessage"
-        >
-        </div>
-
       </div>
 
-    </section>
+      <button
+        class="primary-button"
+        onclick="adminLogin()"
+      >
+        Login
+      </button>
+
+      <div
+        id="adminLoginMessage"
+        class="message hidden"
+      ></div>
+
+    </div>
+
+  </main>
 
 
-    <!-- ADMIN SETUP -->
 
-    <section
-      id="admin"
-      class="hidden"
+  <!-- ADMIN SETUP -->
+
+  <main
+    id="adminScreen"
+    class="screen"
+  >
+
+    <button
+      class="back"
+      onclick="showScreen('homeScreen')"
     >
+      ← Home
+    </button>
 
-      <div class="nav">
+    <div class="section-title">
+      Saturday Setup
+    </div>
 
-        <button onclick="show('home')">
-          Home
-        </button>
 
+    <div class="card">
+
+      <div class="sub-title">
+        1. Round
       </div>
 
-      <div class="card">
+      <div class="field">
 
-        <h2>
-          Saturday Setup
-        </h2>
-
-        <label for="eventDate">
+        <label>
           Date
         </label>
 
@@ -635,8 +940,13 @@
           type="date"
         >
 
-        <label for="eventTee">
-          Tee
+      </div>
+
+
+      <div class="field">
+
+        <label>
+          Tees
         </label>
 
         <select id="eventTee">
@@ -645,1955 +955,3328 @@
             White
           </option>
 
+          <option value="Yellow">
+            Yellow
+          </option>
+
         </select>
 
-        <button
-          class="btn primary"
-          style="margin-top: 14px"
-          onclick="createRound()"
-        >
-          Create New Saturday Round
-        </button>
+      </div>
 
-        <div
-          id="adminEventMessage"
-        >
-        </div>
 
+      <button
+        class="primary-button"
+        onclick="createRound()"
+      >
+        Create New Round
+      </button>
+
+
+      <div
+        id="eventMessage"
+        class="message hidden"
+      ></div>
+
+    </div>
+
+
+
+    <div
+      id="playersCard"
+      class="card hidden"
+    >
+
+      <div class="sub-title">
+        2. Who's playing?
+      </div>
+
+      <p class="small-label">
+        Tick the players and enter today's
+        playing handicap.
+      </p>
+
+      <div id="adminPlayers"></div>
+
+
+      <div class="toggle-row">
+
+        <input
+          id="alternativeStarts"
+          type="checkbox"
+          onchange="renderDraw()"
+        >
+
+        <label for="alternativeStarts">
+          Use alternative starting holes
+        </label>
+
+      </div>
+
+
+      <button
+        class="primary-button"
+        onclick="randomiseGroups()"
+      >
+        Randomise Groups
+      </button>
+
+    </div>
+
+
+
+    <div
+      id="drawCard"
+      class="card hidden"
+    >
+
+      <div class="sub-title">
+        3. Review Draw
       </div>
 
       <div
-        id="groupSetupCard"
-        class="card hidden"
+        id="drawSummary"
+        class="message info"
+      ></div>
+
+      <div id="drawGroups"></div>
+
+
+      <button
+        class="secondary-button"
+        onclick="randomiseGroups()"
       >
-
-        <h2>
-          Groups
-        </h2>
-
-        <p class="meta">
-          Select who is playing, set their playing handicap,
-          assign a group, and nominate the scorer.
-        </p>
-
-        <div id="playerSetup">
-        </div>
-
-        <button
-          class="btn primary"
-          onclick="saveGroupSetup()"
-        >
-          Save Groups
-        </button>
-
-        <div
-          id="groupSaveMessage"
-        >
-        </div>
-
-      </div>
-
-    </section>
+        Reshuffle
+      </button>
 
 
-    <!-- SEASON -->
+      <button
+        class="primary-button"
+        onclick="saveGroupSetup()"
+      >
+        Save Groups
+      </button>
 
-    <section
-      id="season"
-      class="hidden"
-    >
 
-      <div class="nav">
+      <div
+        id="drawMessage"
+        class="message hidden"
+      ></div>
 
-        <button onclick="show('home')">
-          Home
-        </button>
-
-      </div>
-
-      <div class="card">
-
-        <h2>
-          Season
-        </h2>
-
-        <p>
-          <b>
-            Player of the Year
-          </b>
-        </p>
-
-        <p class="meta">
-          Weekly Stableford ranking:
-          5, 4, 3, 2, 1 points.
-        </p>
-
-        <button
-          class="btn small secondary"
-        >
-          Gross Eclectic
-        </button>
-
-        <button
-          class="btn small secondary"
-          style="margin-top: 8px"
-        >
-          Net Eclectic
-        </button>
-
-        <button
-          class="btn small secondary"
-          style="margin-top: 8px"
-        >
-          Winnings
-        </button>
-
-      </div>
-
-    </section>
+    </div>
 
   </main>
 
 
-  <script>
-
-    const API_URL =
-      "https://script.google.com/macros/s/AKfycbwIF6kDgwcYkhc_HpvrorPLvJRv21f9sm8yyzng_mSU1SWunT9BTGGLv1JdbJImnXYLXg/exec";
-
-
-    let currentEvent = null;
-
-    let allPlayers = [];
-
-    let allGroups = [];
-
-    let allScores = [];
-
-    let selectedGroup = null;
-
-    let hole = 1;
-
-    let holeScores = {};
-
-    let course = [];
-
-    let adminPinValue = "";
-
-    let leaderboardTimer = null;
+</div>
 
 
 
-    function show(id) {
+<script>
 
-      document
-        .querySelectorAll("main > section")
-        .forEach(
-          section =>
-            section.classList.add("hidden")
-        );
+const API_URL =
+  'https://script.google.com/macros/s/AKfycbwIF6kDgwcYkhc_HpvrorPLvJRv21f9sm8yyzng_mSU1SWunT9BTGGLv1JdbJImnXYLXg/exec';
 
 
-      document
-        .getElementById(id)
-        .classList.remove("hidden");
+let currentEvent = null;
+
+let allPlayers = [];
+
+let allGroups = [];
+
+let allScores = [];
+
+let course = [];
+
+let adminPinValue = '';
+
+let adminEventId = '';
+
+let drawRows = [];
+
+let selectedGroupNumber = null;
+
+let selectedGroup = [];
+
+let holeOrder = [];
+
+let holeIndex = 0;
+
+let holeScores = {};
+
+let leaderboardTimer = null;
 
 
-      if (
-        id !== "leaderboard" &&
-        leaderboardTimer
-      ) {
 
-        clearInterval(
-          leaderboardTimer
-        );
+function showScreen(id) {
 
-        leaderboardTimer = null;
+  document
+    .querySelectorAll('.screen')
+    .forEach(
+      screen =>
+        screen.classList.remove('active')
+    );
 
-      }
+  document
+    .getElementById(id)
+    .classList.add('active');
 
-    }
+  window.scrollTo(0, 0);
+
+}
 
 
 
-    async function apiGet(
+function showMessage(
+  id,
+  text,
+  type = 'info'
+) {
+
+  const el =
+    document.getElementById(id);
+
+  el.textContent = text;
+
+  el.className =
+    'message ' + type;
+
+}
+
+
+
+function hideMessage(id) {
+
+  document
+    .getElementById(id)
+    .classList.add('hidden');
+
+}
+
+
+
+async function apiGet(
+  action,
+  params = {}
+) {
+
+  const query =
+    new URLSearchParams({
       action,
-      params = {}
-    ) {
+      ...params
+    });
 
-      const url =
-        new URL(API_URL);
+  const response =
+    await fetch(
+      API_URL + '?' + query.toString()
+    );
+
+  const data =
+    await response.json();
+
+  if (!data.ok) {
+
+    throw new Error(
+      data.error ||
+      'Something went wrong'
+    );
+
+  }
+
+  return data;
+
+}
 
 
-      url.searchParams.set(
-        "action",
-        action
+
+async function apiPost(data) {
+
+  const response =
+    await fetch(
+      API_URL,
+      {
+        method: 'POST',
+
+        headers: {
+          'Content-Type':
+            'text/plain;charset=utf-8'
+        },
+
+        body:
+          JSON.stringify(data)
+      }
+    );
+
+  const result =
+    await response.json();
+
+  if (!result.ok) {
+
+    throw new Error(
+      result.error ||
+      'Something went wrong'
+    );
+
+  }
+
+  return result;
+
+}
+
+
+
+async function initialise() {
+
+  try {
+
+    const [
+      status,
+      eventData,
+      playerData,
+      courseData
+    ] =
+    await Promise.all([
+
+      apiGet('status'),
+
+      apiGet('currentEvent'),
+
+      apiGet('players'),
+
+      apiGet('course')
+
+    ]);
+
+
+    currentEvent =
+      eventData.event;
+
+    allPlayers =
+      playerData.players || [];
+
+    course =
+      courseData.course || [];
+
+
+    document
+      .getElementById(
+        'headerStatus'
+      )
+      .textContent =
+        status.message ||
+        'Saturday Golf';
+
+
+    if (currentEvent) {
+
+      document
+        .getElementById(
+          'headerStatus'
+        )
+        .textContent =
+          formatEvent(
+            currentEvent
+          );
+
+    }
+
+  }
+
+  catch (err) {
+
+    showMessage(
+      'homeMessage',
+      'Connection problem: ' +
+      err.message,
+      'bad'
+    );
+
+  }
+
+}
+
+
+
+function formatEvent(event) {
+
+  if (!event) {
+    return 'Saturday Golf';
+  }
+
+  return (
+    formatDate(event.date) +
+    ' · ' +
+    (event.tee || 'White') +
+    ' tees'
+  );
+
+}
+
+
+
+function formatDate(value) {
+
+  if (!value) {
+    return '';
+  }
+
+  const date =
+    new Date(value);
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+
+    return String(value);
+
+  }
+
+  return date
+    .toLocaleDateString(
+      'en-GB',
+      {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric'
+      }
+    );
+
+}
+
+
+
+function todayInputValue() {
+
+  const now = new Date();
+
+  const y =
+    now.getFullYear();
+
+  const m =
+    String(
+      now.getMonth() + 1
+    ).padStart(2, '0');
+
+  const d =
+    String(
+      now.getDate()
+    ).padStart(2, '0');
+
+  return `${y}-${m}-${d}`;
+
+}
+
+
+
+/* -------------------------
+   SCORING
+------------------------- */
+
+
+async function openScoring() {
+
+  try {
+
+    const eventData =
+      await apiGet(
+        'currentEvent'
+      );
+
+    currentEvent =
+      eventData.event;
+
+
+    if (!currentEvent) {
+
+      showMessage(
+        'homeMessage',
+        'There is no active round yet.',
+        'info'
+      );
+
+      return;
+
+    }
+
+
+    const groupData =
+      await apiGet(
+        'groups',
+        {
+          eventId:
+            currentEvent.event_id
+        }
       );
 
 
-      Object.entries(params)
-        .forEach(
-          ([key, value]) =>
-            url.searchParams.set(
-              key,
-              value
+    allGroups =
+      groupData.groups || [];
+
+
+    if (!allGroups.length) {
+
+      showMessage(
+        'homeMessage',
+        'The round exists, but the groups have not been set up yet.',
+        'info'
+      );
+
+      return;
+
+    }
+
+
+    renderGroupList();
+
+    showScreen(
+      'groupScreen'
+    );
+
+  }
+
+  catch (err) {
+
+    showMessage(
+      'homeMessage',
+      err.message,
+      'bad'
+    );
+
+  }
+
+}
+
+
+
+function renderGroupList() {
+
+  const container =
+    document.getElementById(
+      'groupList'
+    );
+
+  const groupNumbers =
+    [
+      ...new Set(
+        allGroups.map(
+          row =>
+            Number(
+              row.group_no
             )
+        )
+      )
+    ]
+    .sort(
+      (a, b) => a - b
+    );
+
+
+  container.innerHTML = '';
+
+
+  groupNumbers.forEach(
+    groupNo => {
+
+      const members =
+        allGroups.filter(
+          row =>
+            Number(
+              row.group_no
+            ) === groupNo
         );
 
 
-      const response =
-        await fetch(
-          url.toString(),
-          {
-            cache: "no-store"
-          }
+      const scorer =
+        members.find(
+          row => row.scorer
         );
 
 
-      if (!response.ok) {
-
-        throw new Error(
-          "Server connection failed"
-        );
-
-      }
+      const start =
+        members[0]
+          ?.start_hole || 1;
 
 
-      return response.json();
-
-    }
-
-
-
-    async function apiPost(data) {
-
-      const response =
-        await fetch(
-          API_URL,
-          {
-            method: "POST",
-
-            headers: {
-              "Content-Type":
-                "text/plain;charset=utf-8"
-            },
-
-            body:
-              JSON.stringify(data)
-          }
+      const button =
+        document.createElement(
+          'button'
         );
 
 
-      if (!response.ok) {
-
-        throw new Error(
-          "Server connection failed"
-        );
-
-      }
-
-
-      return response.json();
-
-    }
-
-
-
-    async function initialise() {
-
-      try {
-
-        const [
-          statusResult,
-          eventResult,
-          playersResult,
-          courseResult
-        ] =
-          await Promise.all([
-            apiGet("status"),
-            apiGet("currentEvent"),
-            apiGet("players"),
-            apiGet("course")
-          ]);
-
-
-        allPlayers =
-          playersResult.players || [];
-
-
-        course =
-          courseResult.course || [];
-
-
-        currentEvent =
-          eventResult.event || null;
-
-
-        document
-          .getElementById(
-            "connectionStatus"
-          )
-          .textContent =
-            statusResult.ok
-              ? "● Live connection"
-              : "Connection problem";
-
-
-        updateHomeEvent();
-
-      }
-
-      catch (error) {
-
-        console.error(error);
-
-
-        document
-          .getElementById(
-            "connectionStatus"
-          )
-          .textContent =
-            "Connection problem";
-
-
-        document
-          .getElementById(
-            "homeEvent"
-          )
-          .textContent =
-            "Could not load today's round.";
-
-      }
-
-    }
-
-
-
-    function updateHomeEvent() {
-
-      const box =
-        document.getElementById(
-          "homeEvent"
-        );
-
-
-      if (!currentEvent) {
-
-        box.innerHTML =
-          "<b>No active round</b><br>" +
-          "<span class='meta'>" +
-          "An admin needs to create today's round." +
-          "</span>";
-
-        return;
-
-      }
-
-
-      box.innerHTML =
-        "<b>" +
-        formatDate(
-          currentEvent.date
-        ) +
-        "</b><br>" +
-        currentEvent.course +
-        " · " +
-        currentEvent.tee +
-        " tees";
-
-    }
-
-
-
-    async function openScoring() {
-
-      if (!currentEvent) {
-
-        await refreshCurrentEvent();
-
-      }
-
-
-      if (!currentEvent) {
-
-        alert(
-          "There is no active Saturday round yet."
-        );
-
-        return;
-
-      }
-
-
-      show(
-        "groupSelect"
-      );
-
-
-      await loadGroups();
-
-    }
-
-
-
-    async function loadGroups() {
-
-      const list =
-        document.getElementById(
-          "groupList"
-        );
-
-
-      list.textContent =
-        "Loading groups...";
-
-
-      try {
-
-        const result =
-          await apiGet(
-            "groups",
-            {
-              eventId:
-                currentEvent.event_id
-            }
+      button.className =
+        'group-button';
+
+
+      button.innerHTML = `
+
+        <strong>
+          Group ${groupNo}
+        </strong>
+
+        <span>
+          ${members
+            .map(
+              p =>
+                escapeHtml(
+                  p.player_name
+                )
+            )
+            .join(', ')}
+        </span>
+
+        <span
+          style="
+            display:block;
+            margin-top:6px;
+          "
+        >
+          Scorer:
+          ${escapeHtml(
+            scorer
+              ?.player_name ||
+            'Not set'
+          )}
+          · Start:
+          ${start}
+        </span>
+
+      `;
+
+
+      button.onclick =
+        () =>
+          selectGroup(
+            groupNo
           );
 
 
-        allGroups =
-          result.groups || [];
+      container
+        .appendChild(
+          button
+        );
+
+    }
+  );
+
+}
 
 
-        if (!allGroups.length) {
 
-          list.innerHTML =
-            "<div class='message'>" +
-            "No groups have been set up yet." +
-            "</div>";
+async function selectGroup(
+  groupNumber
+) {
+
+  selectedGroupNumber =
+    Number(groupNumber);
+
+
+  selectedGroup =
+    allGroups.filter(
+      row =>
+        Number(
+          row.group_no
+        ) ===
+        selectedGroupNumber
+    );
+
+
+  if (!selectedGroup.length) {
+
+    return;
+
+  }
+
+
+  const startHole =
+    Number(
+      selectedGroup[0]
+        .start_hole
+    ) || 1;
+
+
+  holeOrder =
+    buildHoleOrder(
+      startHole
+    );
+
+
+  holeIndex = 0;
+
+
+  try {
+
+    const scoreData =
+      await apiGet(
+        'scores',
+        {
+          eventId:
+            currentEvent.event_id
+        }
+      );
+
+
+    allScores =
+      scoreData.scores || [];
+
+
+    const firstIncomplete =
+      findFirstIncompleteHole();
+
+
+    if (
+      firstIncomplete >= 0
+    ) {
+
+      holeIndex =
+        firstIncomplete;
+
+    }
+
+
+    renderScoring();
+
+    showScreen(
+      'scoreScreen'
+    );
+
+  }
+
+  catch (err) {
+
+    alert(
+      err.message
+    );
+
+  }
+
+}
+
+
+
+function buildHoleOrder(
+  startHole
+) {
+
+  const order = [];
+
+
+  for (
+    let i = 0;
+    i < 18;
+    i++
+  ) {
+
+    order.push(
+      (
+        (
+          startHole - 1 + i
+        ) % 18
+      ) + 1
+    );
+
+  }
+
+
+  return order;
+
+}
+
+
+
+function findFirstIncompleteHole() {
+
+  for (
+    let i = 0;
+    i < holeOrder.length;
+    i++
+  ) {
+
+    const hole =
+      holeOrder[i];
+
+
+    const complete =
+      selectedGroup.every(
+        player =>
+          allScores.some(
+            score =>
+              String(
+                score.player_id
+              ) ===
+              String(
+                player.player_id
+              ) &&
+              Number(
+                score.hole
+              ) === hole
+          )
+      );
+
+
+    if (!complete) {
+
+      return i;
+
+    }
+
+  }
+
+
+  return 17;
+
+}
+
+
+
+function getCurrentCourseHole() {
+
+  const hole =
+    holeOrder[holeIndex];
+
+
+  return course.find(
+    row =>
+      String(
+        row.course
+      ) ===
+      String(
+        currentEvent.course
+      ) &&
+      String(
+        row.tee
+      ) ===
+      String(
+        currentEvent.tee
+      ) &&
+      Number(
+        row.hole
+      ) ===
+      Number(hole)
+  );
+
+}
+
+
+
+function renderScoring() {
+
+  hideMessage(
+    'scoreMessage'
+  );
+
+
+  const hole =
+    holeOrder[
+      holeIndex
+    ];
+
+
+  const courseHole =
+    getCurrentCourseHole();
+
+
+  if (!courseHole) {
+
+    showMessage(
+      'scoreMessage',
+      'Course data for this hole could not be found.',
+      'bad'
+    );
+
+    return;
+
+  }
+
+
+  const scorer =
+    selectedGroup.find(
+      row => row.scorer
+    );
+
+
+  document
+    .getElementById(
+      'scorerBanner'
+    )
+    .innerHTML = `
+
+      <strong>
+        Group ${selectedGroupNumber}
+      </strong>
+      · Scorer:
+      <strong>
+        ${escapeHtml(
+          scorer
+            ?.player_name ||
+          'Not set'
+        )}
+      </strong>
+
+    `;
+
+
+  const progress =
+    (
+      (
+        holeIndex + 1
+      ) / 18
+    ) * 100;
+
+
+  document
+    .getElementById(
+      'holeHeader'
+    )
+    .innerHTML = `
+
+      <div class="hole-number">
+        Hole ${hole}
+      </div>
+
+      <div class="hole-meta">
+        Par ${courseHole.par}
+        · SI ${courseHole.stroke_index}
+        · ${courseHole.yards} yards
+      </div>
+
+      <div class="progress">
+
+        <div
+          class="progress-inner"
+          style="
+            width:${progress}%
+          "
+        ></div>
+
+      </div>
+
+      <div class="small-label"
+        style="margin-top:7px;">
+        Hole ${holeIndex + 1}
+        of 18 for this group
+      </div>
+
+    `;
+
+
+  holeScores = {};
+
+
+  const container =
+    document.getElementById(
+      'scorePlayers'
+    );
+
+
+  container.innerHTML = '';
+
+
+  selectedGroup.forEach(
+    player => {
+
+      const saved =
+        allScores.find(
+          score =>
+            String(
+              score.player_id
+            ) ===
+            String(
+              player.player_id
+            ) &&
+            Number(
+              score.hole
+            ) === hole
+        );
+
+
+      const startingScore =
+        saved
+          ? Number(
+              saved.gross
+            )
+          : null;
+
+
+      holeScores[
+        player.player_id
+      ] =
+        startingScore;
+
+
+      const strokes =
+        calculateHoleStrokes(
+          player.playing_handicap,
+          Number(
+            courseHole.stroke_index
+          )
+        );
+
+
+      const div =
+        document.createElement(
+          'div'
+        );
+
+
+      div.className =
+        'score-player';
+
+
+      div.id =
+        'score-' +
+        player.player_id;
+
+
+      div.innerHTML = `
+
+        <div
+          class="score-player-top"
+        >
+
+          <div>
+
+            <div
+              class="score-player-name"
+            >
+              ${escapeHtml(
+                player.player_name
+              )}
+            </div>
+
+            <div
+              class="small-label"
+            >
+              Playing handicap
+              ${player.playing_handicap}
+            </div>
+
+          </div>
+
+
+          <div
+            class="stroke-info"
+          >
+
+            ${
+              strokes > 0
+                ? `${strokes} stroke${strokes > 1 ? 's' : ''}`
+                : 'No stroke'
+            }
+
+          </div>
+
+        </div>
+
+
+        <div
+          class="quick-scores"
+          id="quick-${player.player_id}"
+        ></div>
+
+
+        <div
+          class="score-adjust"
+        >
+
+          <button
+            class="adjust-button"
+            onclick="
+              adjustScore(
+                '${safeJs(
+                  player.player_id
+                )}',
+                -1
+              )
+            "
+          >
+            −
+          </button>
+
+
+          <div
+            id="display-${player.player_id}"
+            class="score-display"
+          >
+            Select score
+          </div>
+
+
+          <button
+            class="adjust-button"
+            onclick="
+              adjustScore(
+                '${safeJs(
+                  player.player_id
+                )}',
+                1
+              )
+            "
+          >
+            +
+          </button>
+
+        </div>
+
+
+        <div
+          id="points-${player.player_id}"
+          class="points-preview"
+        ></div>
+
+      `;
+
+
+      container
+        .appendChild(div);
+
+
+      renderQuickScores(
+        player,
+        courseHole
+      );
+
+
+      updateScoreDisplay(
+        player,
+        courseHole
+      );
+
+    }
+  );
+
+
+  const button =
+    document.getElementById(
+      'nextButton'
+    );
+
+
+  if (
+    holeIndex === 17
+  ) {
+
+    button.textContent =
+      'Complete Round';
+
+  }
+
+  else {
+
+    button.textContent =
+      'Save & Next';
+
+  }
+
+}
+
+
+
+function renderQuickScores(
+  player,
+  courseHole
+) {
+
+  const container =
+    document.getElementById(
+      'quick-' +
+      player.player_id
+    );
+
+
+  container.innerHTML = '';
+
+
+  const par =
+    Number(
+      courseHole.par
+    );
+
+
+  const scores = [];
+
+
+  for (
+    let score =
+      Math.max(1, par - 2);
+    score <= par + 2;
+    score++
+  ) {
+
+    scores.push(score);
+
+  }
+
+
+  while (
+    scores.length < 5
+  ) {
+
+    scores.push(
+      scores[
+        scores.length - 1
+      ] + 1
+    );
+
+  }
+
+
+  scores
+    .slice(0, 5)
+    .forEach(
+      score => {
+
+        const button =
+          document
+            .createElement(
+              'button'
+            );
+
+
+        button.className =
+          'quick-score';
+
+
+        if (
+          holeScores[
+            player.player_id
+          ] === score
+        ) {
+
+          button.classList
+            .add('selected');
+
+        }
+
+
+        button.textContent =
+          score;
+
+
+        button.onclick =
+          () =>
+            setScore(
+              player.player_id,
+              score
+            );
+
+
+        container
+          .appendChild(
+            button
+          );
+
+      }
+    );
+
+}
+
+
+
+function setScore(
+  playerId,
+  score
+) {
+
+  holeScores[
+    playerId
+  ] =
+    Number(score);
+
+
+  const player =
+    selectedGroup.find(
+      row =>
+        String(
+          row.player_id
+        ) ===
+        String(playerId)
+    );
+
+
+  const courseHole =
+    getCurrentCourseHole();
+
+
+  renderQuickScores(
+    player,
+    courseHole
+  );
+
+
+  updateScoreDisplay(
+    player,
+    courseHole
+  );
+
+}
+
+
+
+function adjustScore(
+  playerId,
+  amount
+) {
+
+  const courseHole =
+    getCurrentCourseHole();
+
+
+  let score =
+    holeScores[
+      playerId
+    ];
+
+
+  if (
+    score === null ||
+    score === undefined
+  ) {
+
+    score =
+      Number(
+        courseHole.par
+      );
+
+  }
+
+  else {
+
+    score += amount;
+
+  }
+
+
+  score =
+    Math.max(
+      1,
+      Math.min(
+        20,
+        score
+      )
+    );
+
+
+  setScore(
+    playerId,
+    score
+  );
+
+}
+
+
+
+function updateScoreDisplay(
+  player,
+  courseHole
+) {
+
+  const score =
+    holeScores[
+      player.player_id
+    ];
+
+
+  const display =
+    document.getElementById(
+      'display-' +
+      player.player_id
+    );
+
+
+  const points =
+    document.getElementById(
+      'points-' +
+      player.player_id
+    );
+
+
+  if (
+    score === null ||
+    score === undefined
+  ) {
+
+    display.textContent =
+      'Select score';
+
+    points.textContent =
+      '';
+
+    return;
+
+  }
+
+
+  display.textContent =
+    score;
+
+
+  const strokes =
+    calculateHoleStrokes(
+      player.playing_handicap,
+      Number(
+        courseHole.stroke_index
+      )
+    );
+
+
+  const net =
+    Number(score) -
+    strokes;
+
+
+  const stableford =
+    Math.max(
+      0,
+      2 +
+      Number(
+        courseHole.par
+      ) -
+      net
+    );
+
+
+  let text =
+    `${stableford} Stableford point${
+      stableford === 1
+        ? ''
+        : 's'
+    }`;
+
+
+  if (
+    strokes > 0
+  ) {
+
+    text +=
+      ` · Net ${net}`;
+
+  }
+
+
+  points.textContent =
+    text;
+
+}
+
+
+
+function calculateHoleStrokes(
+  playingHandicap,
+  strokeIndex
+) {
+
+  const handicap =
+    Math.max(
+      0,
+      Math.round(
+        Number(
+          playingHandicap
+        ) || 0
+      )
+    );
+
+
+  const base =
+    Math.floor(
+      handicap / 18
+    );
+
+
+  const remainder =
+    handicap % 18;
+
+
+  return (
+    base +
+    (
+      Number(
+        strokeIndex
+      ) <= remainder
+        ? 1
+        : 0
+    )
+  );
+
+}
+
+
+
+async function saveAndNext() {
+
+  const hole =
+    holeOrder[
+      holeIndex
+    ];
+
+
+  const missing =
+    selectedGroup.filter(
+      player =>
+        holeScores[
+          player.player_id
+        ] === null ||
+        holeScores[
+          player.player_id
+        ] === undefined
+    );
+
+
+  if (missing.length) {
+
+    showMessage(
+      'scoreMessage',
+      'Please enter a score for everybody.',
+      'bad'
+    );
+
+    return;
+
+  }
+
+
+  const button =
+    document.getElementById(
+      'nextButton'
+    );
+
+
+  button.disabled = true;
+
+  button.textContent =
+    'Saving…';
+
+
+  try {
+
+    for (
+      const player
+      of selectedGroup
+    ) {
+
+      const result =
+        await apiPost({
+
+          action:
+            'saveScore',
+
+          eventId:
+            currentEvent.event_id,
+
+          playerId:
+            player.player_id,
+
+          hole:
+            hole,
+
+          gross:
+            Number(
+              holeScores[
+                player.player_id
+              ]
+            )
+
+        });
+
+
+      const existing =
+        allScores.findIndex(
+          score =>
+            String(
+              score.player_id
+            ) ===
+            String(
+              player.player_id
+            ) &&
+            Number(
+              score.hole
+            ) === hole
+        );
+
+
+      const localScore = {
+
+        event_id:
+          currentEvent.event_id,
+
+        player_id:
+          player.player_id,
+
+        hole:
+          hole,
+
+        gross:
+          result.gross,
+
+        net:
+          result.net,
+
+        stableford:
+          result.stableford,
+
+        blob:
+          result.blob,
+
+        birdie:
+          result.birdie,
+
+        eagle:
+          result.eagle
+
+      };
+
+
+      if (
+        existing >= 0
+      ) {
+
+        allScores[
+          existing
+        ] =
+          localScore;
+
+      }
+
+      else {
+
+        allScores.push(
+          localScore
+        );
+
+      }
+
+    }
+
+
+    if (
+      holeIndex === 17
+    ) {
+
+      await apiPost({
+
+        action:
+          'completeGroup',
+
+        eventId:
+          currentEvent.event_id,
+
+        groupNo:
+          selectedGroupNumber
+
+      });
+
+
+      showScreen(
+        'completeScreen'
+      );
+
+      return;
+
+    }
+
+
+    holeIndex++;
+
+    renderScoring();
+
+    window.scrollTo(
+      0,
+      0
+    );
+
+  }
+
+  catch (err) {
+
+    showMessage(
+      'scoreMessage',
+      err.message,
+      'bad'
+    );
+
+  }
+
+  finally {
+
+    button.disabled = false;
+
+  }
+
+}
+
+
+
+function previousHole() {
+
+  if (
+    holeIndex <= 0
+  ) {
+
+    return;
+
+  }
+
+
+  holeIndex--;
+
+  renderScoring();
+
+  window.scrollTo(
+    0,
+    0
+  );
+
+}
+
+
+
+function returnToGroups() {
+
+  showScreen(
+    'groupScreen'
+  );
+
+}
+
+
+
+/* -------------------------
+   LEADERBOARD
+------------------------- */
+
+
+async function openLeaderboard() {
+
+  if (
+    leaderboardTimer
+  ) {
+
+    clearInterval(
+      leaderboardTimer
+    );
+
+  }
+
+
+  showScreen(
+    'leaderboardScreen'
+  );
+
+
+  await refreshLeaderboard();
+
+
+  leaderboardTimer =
+    setInterval(
+      refreshLeaderboard,
+      8000
+    );
+
+}
+
+
+
+async function refreshLeaderboard() {
+
+  try {
+
+    const eventData =
+      await apiGet(
+        'currentEvent'
+      );
+
+
+    currentEvent =
+      eventData.event;
+
+
+    if (!currentEvent) {
+
+      document
+        .getElementById(
+          'leaderboardTable'
+        )
+        .innerHTML =
+          'No active round.';
+
+      return;
+
+    }
+
+
+    document
+      .getElementById(
+        'leaderEvent'
+      )
+      .className =
+        'message info';
+
+
+    document
+      .getElementById(
+        'leaderEvent'
+      )
+      .textContent =
+        formatEvent(
+          currentEvent
+        );
+
+
+    const data =
+      await apiGet(
+        'leaderboard',
+        {
+          eventId:
+            currentEvent.event_id
+        }
+      );
+
+
+    renderLeaderboard(
+      data.leaderboard || []
+    );
+
+  }
+
+  catch (err) {
+
+    document
+      .getElementById(
+        'leaderboardTable'
+      )
+      .textContent =
+        err.message;
+
+  }
+
+}
+
+
+
+function renderLeaderboard(
+  rows
+) {
+
+  const container =
+    document.getElementById(
+      'leaderboardTable'
+    );
+
+
+  if (!rows.length) {
+
+    container.innerHTML =
+      'No scores yet.';
+
+    return;
+
+  }
+
+
+  let html = `
+
+    <table>
+
+      <thead>
+
+        <tr>
+          <th>Player</th>
+          <th>Gross</th>
+          <th>Net</th>
+          <th>Pts</th>
+        </tr>
+
+      </thead>
+
+      <tbody>
+
+  `;
+
+
+  rows.forEach(
+    (row, index) => {
+
+      html += `
+
+        <tr>
+
+          <td>
+
+            <span
+              class="leader-pos"
+            >
+              ${index + 1}.
+            </span>
+
+            <span
+              class="leader-name"
+            >
+              ${escapeHtml(
+                row.name
+              )}
+            </span>
+
+            <span
+              class="leader-meta"
+            >
+              ${row.holes}/18 holes
+            </span>
+
+          </td>
+
+          <td>
+            ${row.gross}
+          </td>
+
+          <td>
+            ${row.net}
+          </td>
+
+          <td
+            class="big-points"
+          >
+            ${row.stableford}
+          </td>
+
+        </tr>
+
+      `;
+
+    }
+  );
+
+
+  html += `
+
+      </tbody>
+
+    </table>
+
+  `;
+
+
+  container.innerHTML =
+    html;
+
+}
+
+
+
+function closeLeaderboard() {
+
+  if (
+    leaderboardTimer
+  ) {
+
+    clearInterval(
+      leaderboardTimer
+    );
+
+    leaderboardTimer = null;
+
+  }
+
+
+  showScreen(
+    'homeScreen'
+  );
+
+}
+
+
+
+/* -------------------------
+   SEASON
+------------------------- */
+
+
+function openSeason() {
+
+  showScreen(
+    'seasonScreen'
+  );
+
+}
+
+
+
+/* -------------------------
+   ADMIN
+------------------------- */
+
+
+function openAdmin() {
+
+  document
+    .getElementById(
+      'adminPin'
+    )
+    .value = '';
+
+  hideMessage(
+    'adminLoginMessage'
+  );
+
+  showScreen(
+    'adminLoginScreen'
+  );
+
+}
+
+
+
+async function adminLogin() {
+
+  const pin =
+    document
+      .getElementById(
+        'adminPin'
+      )
+      .value
+      .trim();
+
+
+  if (!pin) {
+
+    showMessage(
+      'adminLoginMessage',
+      'Enter the admin PIN.',
+      'bad'
+    );
+
+    return;
+
+  }
+
+
+  try {
+
+    const result =
+      await apiPost({
+
+        action:
+          'adminLogin',
+
+        pin:
+          pin
+
+      });
+
+
+    if (!result.ok) {
+
+      showMessage(
+        'adminLoginMessage',
+        'Incorrect PIN.',
+        'bad'
+      );
+
+      return;
+
+    }
+
+
+    adminPinValue =
+      pin;
+
+
+    document
+      .getElementById(
+        'eventDate'
+      )
+      .value =
+        todayInputValue();
+
+
+    document
+      .getElementById(
+        'eventTee'
+      )
+      .value =
+        'White';
+
+
+    document
+      .getElementById(
+        'playersCard'
+      )
+      .classList
+      .add('hidden');
+
+
+    document
+      .getElementById(
+        'drawCard'
+      )
+      .classList
+      .add('hidden');
+
+
+    hideMessage(
+      'eventMessage'
+    );
+
+
+    showScreen(
+      'adminScreen'
+    );
+
+  }
+
+  catch (err) {
+
+    showMessage(
+      'adminLoginMessage',
+      err.message,
+      'bad'
+    );
+
+  }
+
+}
+
+
+
+async function createRound() {
+
+  const date =
+    document
+      .getElementById(
+        'eventDate'
+      )
+      .value;
+
+
+  const tee =
+    document
+      .getElementById(
+        'eventTee'
+      )
+      .value;
+
+
+  if (!date) {
+
+    showMessage(
+      'eventMessage',
+      'Choose a date.',
+      'bad'
+    );
+
+    return;
+
+  }
+
+
+  try {
+
+    showMessage(
+      'eventMessage',
+      'Creating round…',
+      'info'
+    );
+
+
+    const result =
+      await apiPost({
+
+        action:
+          'createEvent',
+
+        pin:
+          adminPinValue,
+
+        date:
+          date,
+
+        tee:
+          tee
+
+      });
+
+
+    adminEventId =
+      result.event_id;
+
+
+    currentEvent = {
+
+      event_id:
+        adminEventId,
+
+      date:
+        date,
+
+      course:
+        'Brickendon Grange',
+
+      tee:
+        tee,
+
+      status:
+        'active'
+
+    };
+
+
+    document
+      .getElementById(
+        'headerStatus'
+      )
+      .textContent =
+        formatEvent(
+          currentEvent
+        );
+
+
+    showMessage(
+      'eventMessage',
+      'Round created. Now choose the players.',
+      'good'
+    );
+
+
+    await loadAdminPlayers();
+
+
+    document
+      .getElementById(
+        'playersCard'
+      )
+      .classList
+      .remove('hidden');
+
+
+    document
+      .getElementById(
+        'drawCard'
+      )
+      .classList
+      .add('hidden');
+
+  }
+
+  catch (err) {
+
+    showMessage(
+      'eventMessage',
+      err.message,
+      'bad'
+    );
+
+  }
+
+}
+
+
+
+async function loadAdminPlayers() {
+
+  const data =
+    await apiGet(
+      'players'
+    );
+
+
+  allPlayers =
+    data.players || [];
+
+
+  renderPlayerSetup();
+
+}
+
+
+
+function renderPlayerSetup() {
+
+  const container =
+    document.getElementById(
+      'adminPlayers'
+    );
+
+
+  container.innerHTML = '';
+
+
+  allPlayers.forEach(
+    player => {
+
+      const div =
+        document.createElement(
+          'div'
+        );
+
+
+      div.className =
+        'player-select-row';
+
+
+      const handicap =
+        player.handicap_index ===
+          '' ||
+        player.handicap_index ===
+          undefined
+          ? ''
+          : player.handicap_index;
+
+
+      div.innerHTML = `
+
+        <input
+          type="checkbox"
+          class="player-check"
+          data-player-id="${escapeAttribute(
+            player.player_id
+          )}"
+          checked
+        >
+
+
+        <div>
+
+          <strong>
+            ${escapeHtml(
+              player.name
+            )}
+          </strong>
+
+        </div>
+
+
+        <input
+          type="number"
+          inputmode="decimal"
+          step="1"
+          class="player-handicap"
+          data-player-id="${escapeAttribute(
+            player.player_id
+          )}"
+          value="${escapeAttribute(
+            handicap
+          )}"
+          placeholder="Hcp"
+        >
+
+      `;
+
+
+      container
+        .appendChild(
+          div
+        );
+
+    }
+  );
+
+}
+
+
+
+/* -------------------------
+   RANDOM DRAW
+------------------------- */
+
+
+function randomiseGroups() {
+
+  const selected =
+    getSelectedAdminPlayers();
+
+
+  if (
+    selected.length < 2
+  ) {
+
+    alert(
+      'Select at least two players.'
+    );
+
+    return;
+
+  }
+
+
+  const shuffled =
+    shuffleArray(
+      [...selected]
+    );
+
+
+  const groupCount =
+    Math.ceil(
+      shuffled.length / 4
+    );
+
+
+  const baseSize =
+    Math.floor(
+      shuffled.length /
+      groupCount
+    );
+
+
+  const largerGroups =
+    shuffled.length %
+    groupCount;
+
+
+  const groups = [];
+
+  let offset = 0;
+
+
+  for (
+    let i = 0;
+    i < groupCount;
+    i++
+  ) {
+
+    const size =
+      baseSize +
+      (
+        i < largerGroups
+          ? 1
+          : 0
+      );
+
+
+    groups.push(
+      shuffled.slice(
+        offset,
+        offset + size
+      )
+    );
+
+
+    offset += size;
+
+  }
+
+
+  drawRows = [];
+
+
+  groups.forEach(
+    (members, index) => {
+
+      const scorerIndex =
+        Math.floor(
+          Math.random() *
+          members.length
+        );
+
+
+      members.forEach(
+        (player, memberIndex) => {
+
+          drawRows.push({
+
+            player_id:
+              player.player_id,
+
+            player_name:
+              player.name,
+
+            playing_handicap:
+              player.playing_handicap,
+
+            group_no:
+              index + 1,
+
+            scorer:
+              memberIndex ===
+              scorerIndex,
+
+            start_hole:
+              1
+
+          });
+
+        }
+      );
+
+    }
+  );
+
+
+  document
+    .getElementById(
+      'drawCard'
+    )
+    .classList
+    .remove('hidden');
+
+
+  renderDraw();
+
+
+  document
+    .getElementById(
+      'drawCard'
+    )
+    .scrollIntoView({
+      behavior: 'smooth'
+    });
+
+}
+
+
+
+function getSelectedAdminPlayers() {
+
+  const selected = [];
+
+
+  document
+    .querySelectorAll(
+      '.player-check:checked'
+    )
+    .forEach(
+      checkbox => {
+
+        const id =
+          checkbox.dataset
+            .playerId;
+
+
+        const player =
+          allPlayers.find(
+            p =>
+              String(
+                p.player_id
+              ) ===
+              String(id)
+          );
+
+
+        const handicapInput =
+          document
+            .querySelector(
+              `.player-handicap[data-player-id="${cssEscape(id)}"]`
+            );
+
+
+        const handicap =
+          Number(
+            handicapInput
+              ?.value
+          );
+
+
+        if (
+          !Number.isFinite(
+            handicap
+          )
+        ) {
 
           return;
 
         }
 
 
-        const groupNumbers =
-          [
-            ...new Set(
-              allGroups.map(
-                row =>
-                  Number(row.group_no)
-              )
+        selected.push({
+
+          player_id:
+            player.player_id,
+
+          name:
+            player.name,
+
+          playing_handicap:
+            handicap
+
+        });
+
+      }
+    );
+
+
+  return selected;
+
+}
+
+
+
+function shuffleArray(array) {
+
+  for (
+    let i =
+      array.length - 1;
+    i > 0;
+    i--
+  ) {
+
+    const j =
+      Math.floor(
+        Math.random() *
+        (i + 1)
+      );
+
+
+    [
+      array[i],
+      array[j]
+    ] =
+    [
+      array[j],
+      array[i]
+    ];
+
+  }
+
+
+  return array;
+
+}
+
+
+
+function renderDraw() {
+
+  if (!drawRows.length) {
+
+    return;
+
+  }
+
+
+  const alternative =
+    document
+      .getElementById(
+        'alternativeStarts'
+      )
+      .checked;
+
+
+  if (!alternative) {
+
+    drawRows.forEach(
+      row =>
+        row.start_hole = 1
+    );
+
+  }
+
+
+  normaliseScorers();
+
+
+  const groupNumbers =
+    [
+      ...new Set(
+        drawRows.map(
+          row =>
+            Number(
+              row.group_no
             )
-          ]
-          .sort(
-            (a, b) => a - b
-          );
-
-
-        list.innerHTML =
-          groupNumbers.map(
-            groupNumber => {
-
-              const players =
-                allGroups.filter(
-                  player =>
-                    Number(
-                      player.group_no
-                    ) === groupNumber
-                );
-
-
-              const scorer =
-                players.find(
-                  player =>
-                    player.scorer
-                );
-
-
-              return `
-
-                <div
-                  class="group-card"
-                  onclick="selectGroup(${groupNumber})"
-                >
-
-                  <h3>
-                    Group ${groupNumber}
-                  </h3>
-
-                  <div>
-                    ${players
-                      .map(
-                        player =>
-                          `${player.player_name} (${player.playing_handicap})`
-                      )
-                      .join("<br>")}
-                  </div>
-
-                  <div class="meta"
-                    style="margin-top:8px"
-                  >
-                    Scorer:
-                    ${
-                      scorer
-                        ? scorer.player_name
-                        : "Not assigned"
-                    }
-                  </div>
-
-                </div>
-
-              `;
-
-            }
-          )
-          .join("");
-
-      }
-
-      catch (error) {
-
-        console.error(error);
-
-
-        list.innerHTML =
-          "<div class='message error'>" +
-          "Could not load groups." +
-          "</div>";
-
-      }
-
-    }
-
-
-
-    async function selectGroup(
-      groupNumber
-    ) {
-
-      selectedGroup =
-        groupNumber;
-
-
-      hole = 1;
-
-
-      try {
-
-        const result =
-          await apiGet(
-            "scores",
-            {
-              eventId:
-                currentEvent.event_id
-            }
-          );
-
-
-        allScores =
-          result.scores || [];
-
-
-        show(
-          "scoring"
-        );
-
-
-        renderScoring();
-
-      }
-
-      catch (error) {
-
-        console.error(error);
-
-        alert(
-          "Could not load saved scores."
-        );
-
-      }
-
-    }
-
-
-
-    function currentGroupPlayers() {
-
-      return allGroups.filter(
-        player =>
-          Number(
-            player.group_no
-          ) ===
-          Number(
-            selectedGroup
-          )
-      );
-
-    }
-
-
-
-    function getCourseHole(
-      holeNumber
-    ) {
-
-      return course.find(
-        row =>
-          String(row.course)
-            === String(
-              currentEvent.course
-            ) &&
-          String(row.tee)
-            === String(
-              currentEvent.tee
-            ) &&
-          Number(row.hole)
-            === Number(
-              holeNumber
-            )
-      );
-
-    }
-
-
-
-    function findSavedScore(
-      playerId,
-      holeNumber
-    ) {
-
-      return allScores.find(
-        score =>
-          String(score.player_id)
-            === String(playerId) &&
-          Number(score.hole)
-            === Number(
-              holeNumber
-            )
-      );
-
-    }
-
-
-
-    function renderScoring() {
-
-      const courseHole =
-        getCourseHole(hole);
-
-
-      if (!courseHole) {
-
-        document
-          .getElementById(
-            "holeTitle"
-          )
-          .textContent =
-            "Course data missing";
-
-        return;
-
-      }
-
-
-      document
-        .getElementById(
-          "scoreEventMeta"
         )
-        .textContent =
-          `Group ${selectedGroup} · ${currentEvent.tee} tees`;
-
-
-      document
-        .getElementById(
-          "holeTitle"
-        )
-        .textContent =
-          `Hole ${hole}`;
-
-
-      document
-        .getElementById(
-          "holeMeta"
-        )
-        .textContent =
-          `Par ${courseHole.par} · SI ${courseHole.stroke_index} · ${courseHole.yards} yds`;
-
-
-      holeScores = {};
-
-
-      const players =
-        currentGroupPlayers();
-
-
-      players.forEach(
-        player => {
-
-          const saved =
-            findSavedScore(
-              player.player_id,
-              hole
-            );
-
-
-          holeScores[
-            player.player_id
-          ] =
-            saved
-              ? Number(
-                  saved.gross
-                )
-              : null;
-
-        }
-      );
-
-
-      renderScoreRows();
-
-
-      document
-        .getElementById(
-          "nextBtn"
-        )
-        .textContent =
-          hole === 18
-            ? "Complete Round"
-            : "Save & Next";
-
-    }
-
-
-
-    function renderScoreRows() {
-
-      const container =
-        document.getElementById(
-          "players"
-        );
-
-
-      container.innerHTML =
-        currentGroupPlayers()
-          .map(
-            player => {
-
-              const score =
-                holeScores[
-                  player.player_id
-                ];
-
-
-              const saved =
-                findSavedScore(
-                  player.player_id,
-                  hole
-                );
-
-
-              const detail =
-                saved
-                  ? `Net ${saved.net} · ${saved.stableford} pts`
-                  : "Gross score";
-
-
-              return `
-
-                <div class="score-row">
-
-                  <div>
-
-                    <b>
-                      ${player.player_name}
-                    </b>
-
-                    <div class="meta">
-                      Hcap ${player.playing_handicap}
-                      · ${detail}
-                    </div>
-
-                  </div>
-
-                  <div class="step">
-
-                    <button
-                      onclick="changeScore(
-                        '${player.player_id}',
-                        -1
-                      )"
-                    >
-                      −
-                    </button>
-
-                    <span
-                      class="score ${
-                        score === null
-                          ? "score-empty"
-                          : ""
-                      }"
-                    >
-                      ${
-                        score === null
-                          ? "–"
-                          : score
-                      }
-                    </span>
-
-                    <button
-                      onclick="changeScore(
-                        '${player.player_id}',
-                        1
-                      )"
-                    >
-                      +
-                    </button>
-
-                  </div>
-
-                </div>
-
-              `;
-
-            }
-          )
-          .join("");
-
-    }
-
-
-
-    function changeScore(
-      playerId,
-      amount
-    ) {
-
-      const courseHole =
-        getCourseHole(hole);
-
-
-      let score =
-        holeScores[playerId];
-
-
-      if (score === null) {
-
-        score =
-          Number(
-            courseHole.par
-          );
-
-      }
-
-      else {
-
-        score += amount;
-
-      }
-
-
-      score =
-        Math.max(
-          1,
-          score
-        );
-
-
-      holeScores[playerId] =
-        score;
-
-
-      renderScoreRows();
-
-    }
-
-
-
-    async function saveAndNext() {
-
-      const players =
-        currentGroupPlayers();
-
-
-      const missing =
-        players.filter(
-          player =>
-            holeScores[
-              player.player_id
-            ] === null
-        );
-
-
-      if (missing.length) {
-
-        showScoreMessage(
-          "Enter a score for every player.",
-          "error"
-        );
-
-        return;
-
-      }
-
-
-      const button =
-        document.getElementById(
-          "nextBtn"
-        );
-
-
-      button.disabled = true;
-
-      button.textContent =
-        "Saving...";
-
-
-      try {
-
-        for (
-          const player
-          of players
-        ) {
-
-          const result =
-            await apiPost({
-              action:
-                "saveScore",
-
-              eventId:
-                currentEvent.event_id,
-
-              playerId:
-                player.player_id,
-
-              hole:
-                hole,
-
-              gross:
-                holeScores[
-                  player.player_id
-                ]
-            });
-
-
-          if (!result.ok) {
-
-            throw new Error(
-              result.error ||
-              "Score could not be saved"
-            );
-
-          }
-
-
-          const existingIndex =
-            allScores.findIndex(
-              score =>
-                String(
-                  score.player_id
-                ) ===
-                String(
-                  player.player_id
-                ) &&
+      )
+    ]
+    .sort(
+      (a, b) => a - b
+    );
+
+
+  const summary =
+    groupNumbers
+      .map(
+        groupNo => {
+
+          const count =
+            drawRows.filter(
+              row =>
                 Number(
-                  score.hole
-                ) === hole
-            );
+                  row.group_no
+                ) === groupNo
+            ).length;
 
 
-          const updated = {
-            event_id:
-              currentEvent.event_id,
-            player_id:
-              player.player_id,
-            hole:
-              hole,
-            gross:
-              result.gross,
-            net:
-              result.net,
-            stableford:
-              result.stableford,
-            blob:
-              result.blob,
-            birdie:
-              result.birdie,
-            eagle:
-              result.eagle
-          };
-
-
-          if (existingIndex >= 0) {
-
-            allScores[
-              existingIndex
-            ] =
-              updated;
-
-          }
-
-          else {
-
-            allScores.push(
-              updated
-            );
-
-          }
-
-        }
-
-
-        if (hole < 18) {
-
-          hole++;
-
-          renderScoring();
-
-          showScoreMessage(
-            "Scores saved.",
-            "success"
+          return (
+            `Group ${groupNo}: ${count}`
           );
 
         }
-
-        else {
-
-          showScoreMessage(
-            "Round saved. All 18 holes complete.",
-            "success"
-          );
+      )
+      .join(' · ');
 
 
-          button.textContent =
-            "Round Complete";
-
-        }
-
-      }
-
-      catch (error) {
-
-        console.error(error);
+  document
+    .getElementById(
+      'drawSummary'
+    )
+    .textContent =
+      summary;
 
 
-        showScoreMessage(
-          error.message,
-          "error"
+  const container =
+    document
+      .getElementById(
+        'drawGroups'
+      );
+
+
+  container.innerHTML = '';
+
+
+  groupNumbers.forEach(
+    groupNo => {
+
+      const members =
+        drawRows.filter(
+          row =>
+            Number(
+              row.group_no
+            ) === groupNo
         );
 
-      }
 
-      finally {
+      const start =
+        members[0]
+          ?.start_hole || 1;
 
-        button.disabled = false;
-
-
-        if (hole < 18) {
-
-          button.textContent =
-            "Save & Next";
-
-        }
-
-      }
-
-    }
-
-
-
-    function previousHole() {
-
-      if (hole > 1) {
-
-        hole--;
-
-        renderScoring();
-
-      }
-
-    }
-
-
-
-    function showScoreMessage(
-      text,
-      type
-    ) {
 
       const box =
-        document.getElementById(
-          "scoreMessage"
+        document.createElement(
+          'div'
         );
 
 
       box.className =
-        `message ${type}`;
+        'draw-group';
 
 
-      box.textContent =
-        text;
+      let startHtml = `
 
-    }
+        <span>
+          Start 1
+        </span>
 
+      `;
 
 
-    async function openLeaderboard() {
+      if (alternative) {
 
-      if (!currentEvent) {
+        startHtml = `
 
-        await refreshCurrentEvent();
+          <select
+            class="start-select"
+            onchange="
+              setGroupStart(
+                ${groupNo},
+                this.value
+              )
+            "
+          >
 
-      }
-
-
-      show(
-        "leaderboard"
-      );
-
-
-      await loadLeaderboard();
-
-
-      leaderboardTimer =
-        setInterval(
-          loadLeaderboard,
-          8000
-        );
-
-    }
-
-
-
-    async function loadLeaderboard() {
-
-      const board =
-        document.getElementById(
-          "board"
-        );
-
-
-      if (!currentEvent) {
-
-        board.innerHTML =
-          "<tr>" +
-          "<td colspan='5'>" +
-          "No active round" +
-          "</td>" +
-          "</tr>";
-
-        return;
-
-      }
-
-
-      try {
-
-        const result =
-          await apiGet(
-            "leaderboard",
-            {
-              eventId:
-                currentEvent.event_id
-            }
-          );
-
-
-        const rows =
-          result.leaderboard || [];
-
-
-        document
-          .getElementById(
-            "leaderboardEvent"
-          )
-          .textContent =
-            `${formatDate(currentEvent.date)} · ${currentEvent.tee} tees`;
-
-
-        if (!rows.length) {
-
-          board.innerHTML =
-            "<tr>" +
-            "<td colspan='5'>" +
-            "No scores yet" +
-            "</td>" +
-            "</tr>";
-
-          return;
-
-        }
-
-
-        board.innerHTML =
-          rows.map(
-            row => `
-
-              <tr>
-
-                <td>
-                  ${row.name}
-                </td>
-
-                <td>
-                  ${row.holes}
-                </td>
-
-                <td>
-                  ${
-                    row.holes
-                      ? row.gross
-                      : "–"
-                  }
-                </td>
-
-                <td>
-                  ${
-                    row.holes
-                      ? row.net
-                      : "–"
-                  }
-                </td>
-
-                <td>
-                  <b>
-                    ${row.stableford}
-                  </b>
-                </td>
-
-              </tr>
-
-            `
-          )
-          .join("");
-
-      }
-
-      catch (error) {
-
-        console.error(error);
-
-
-        board.innerHTML =
-          "<tr>" +
-          "<td colspan='5'>" +
-          "Could not load leaderboard" +
-          "</td>" +
-          "</tr>";
-
-      }
-
-    }
-
-
-
-    function openAdmin() {
-
-      if (adminPinValue) {
-
-        show(
-          "admin"
-        );
-
-        loadAdminPlayers();
-
-      }
-
-      else {
-
-        show(
-          "adminLogin"
-        );
-
-      }
-
-    }
-
-
-
-    async function adminLogin() {
-
-      const pin =
-        document
-          .getElementById(
-            "adminPin"
-          )
-          .value.trim();
-
-
-      const message =
-        document.getElementById(
-          "adminLoginMessage"
-        );
-
-
-      if (!pin) {
-
-        message.className =
-          "message error";
-
-        message.textContent =
-          "Enter the admin PIN.";
-
-        return;
-
-      }
-
-
-      try {
-
-        const result =
-          await apiPost({
-            action:
-              "adminLogin",
-            pin:
-              pin
-          });
-
-
-        if (!result.ok) {
-
-          message.className =
-            "message error";
-
-          message.textContent =
-            "Incorrect PIN.";
-
-          return;
-
-        }
-
-
-        adminPinValue =
-          pin;
-
-
-        show(
-          "admin"
-        );
-
-
-        loadAdminPlayers();
-
-      }
-
-      catch (error) {
-
-        console.error(error);
-
-
-        message.className =
-          "message error";
-
-        message.textContent =
-          "Could not sign in.";
-
-      }
-
-    }
-
-
-
-    async function loadAdminPlayers() {
-
-      try {
-
-        const result =
-          await apiGet(
-            "players"
-          );
-
-
-        allPlayers =
-          result.players || [];
-
-
-        renderPlayerSetup();
-
-
-        setTodayDate();
-
-      }
-
-      catch (error) {
-
-        console.error(error);
-
-      }
-
-    }
-
-
-
-    function renderPlayerSetup() {
-
-      const container =
-        document.getElementById(
-          "playerSetup"
-        );
-
-
-      if (!allPlayers.length) {
-
-        container.innerHTML =
-          "<div class='message'>" +
-          "No players found." +
-          "</div>";
-
-        return;
-
-      }
-
-
-      container.innerHTML =
-        allPlayers.map(
-          player => `
-
-            <div
-              class="player-setup"
-              data-player-id="${player.player_id}"
+            <option
+              value="1"
+              ${start == 1
+                ? 'selected'
+                : ''}
             >
+              Start 1
+            </option>
 
-              <div class="checkbox-line">
+            <option
+              value="7"
+              ${start == 7
+                ? 'selected'
+                : ''}
+            >
+              Start 7
+            </option>
 
-                <input
-                  type="checkbox"
-                  class="playing"
-                  id="play-${player.player_id}"
-                >
+            <option
+              value="13"
+              ${start == 13
+                ? 'selected'
+                : ''}
+            >
+              Start 13
+            </option>
 
-                <label
-                  style="margin:0"
-                  for="play-${player.player_id}"
-                >
-                  ${player.name}
-                </label>
+          </select>
 
-              </div>
+        `;
 
-              <div class="setup-grid">
+      }
 
-                <div>
 
-                  <label>
-                    Handicap
-                  </label>
+      box.innerHTML = `
 
-                  <input
-                    type="number"
-                    step="1"
-                    class="handicap"
-                    value="${
-                      Math.round(
-                        Number(
-                          player.handicap_index
-                        ) || 0
-                      )
-                    }"
-                  >
+        <div
+          class="draw-group-title"
+        >
 
-                </div>
+          <span>
+            Group ${groupNo}
+          </span>
 
-                <div>
+          ${startHtml}
 
-                  <label>
-                    Group
-                  </label>
+        </div>
 
-                  <input
-                    type="number"
-                    min="1"
-                    max="20"
-                    class="group-number"
-                    value="1"
-                  >
+      `;
 
-                </div>
 
-                <div>
+      members.forEach(
+        player => {
 
-                  <label>
-                    Scorer
-                  </label>
+          const row =
+            document
+              .createElement(
+                'div'
+              );
 
-                  <select
-                    class="scorer"
-                  >
 
-                    <option value="false">
-                      No
-                    </option>
+          row.className =
+            'draw-player';
 
-                    <option value="true">
-                      Yes
-                    </option>
 
-                  </select>
+          row.innerHTML = `
 
-                </div>
+            <div>
 
+              <strong>
+                ${escapeHtml(
+                  player.player_name
+                )}
+              </strong>
+
+              <div
+                class="small-label"
+              >
+                Hcp
+                ${player.playing_handicap}
               </div>
 
             </div>
 
-          `
-        )
-        .join("");
 
-    }
-
-
-
-    async function createRound() {
-
-      const date =
-        document
-          .getElementById(
-            "eventDate"
-          )
-          .value;
-
-
-      const tee =
-        document
-          .getElementById(
-            "eventTee"
-          )
-          .value;
-
-
-      const message =
-        document.getElementById(
-          "adminEventMessage"
-        );
-
-
-      if (!date) {
-
-        message.className =
-          "message error";
-
-        message.textContent =
-          "Choose a date.";
-
-        return;
-
-      }
-
-
-      try {
-
-        const result =
-          await apiPost({
-            action:
-              "createEvent",
-
-            pin:
-              adminPinValue,
-
-            date:
-              date,
-
-            course:
-              "Brickendon Grange",
-
-            tee:
-              tee
-          });
-
-
-        if (!result.ok) {
-
-          throw new Error(
-            result.error ||
-            "Could not create round"
-          );
-
-        }
-
-
-        currentEvent = {
-          event_id:
-            result.event_id,
-          date:
-            date,
-          course:
-            "Brickendon Grange",
-          tee:
-            tee,
-          status:
-            "active"
-        };
-
-
-        message.className =
-          "message success";
-
-
-        message.textContent =
-          "Round created. Now assign the groups.";
-
-
-        document
-          .getElementById(
-            "groupSetupCard"
-          )
-          .classList.remove(
-            "hidden"
-          );
-
-
-        renderPlayerSetup();
-
-
-        updateHomeEvent();
-
-      }
-
-      catch (error) {
-
-        console.error(error);
-
-
-        message.className =
-          "message error";
-
-
-        message.textContent =
-          error.message;
-
-      }
-
-    }
-
-
-
-    async function saveGroupSetup() {
-
-      if (!currentEvent) {
-
-        alert(
-          "Create the round first."
-        );
-
-        return;
-
-      }
-
-
-      const rows =
-        [
-          ...document.querySelectorAll(
-            ".player-setup"
-          )
-        ];
-
-
-      const groups = [];
-
-
-      rows.forEach(
-        row => {
-
-          const playing =
-            row.querySelector(
-              ".playing"
-            ).checked;
-
-
-          if (!playing) {
-            return;
-          }
-
-
-          groups.push({
-
-            player_id:
-              row.dataset.playerId,
-
-            playing_handicap:
-              Number(
-                row.querySelector(
-                  ".handicap"
-                ).value
-              ),
-
-            group_no:
-              Number(
-                row.querySelector(
-                  ".group-number"
-                ).value
-              ),
-
-            scorer:
-              row.querySelector(
-                ".scorer"
-              ).value === "true"
-
-          });
+            <select
+              onchange="
+                movePlayer(
+                  '${safeJs(
+                    player.player_id
+                  )}',
+                  this.value
+                )
+              "
+            >
+
+              ${groupNumbers
+                .map(
+                  g => `
+
+                    <option
+                      value="${g}"
+                      ${
+                        Number(
+                          player.group_no
+                        ) === g
+                          ? 'selected'
+                          : ''
+                      }
+                    >
+                      G${g}
+                    </option>
+
+                  `
+                )
+                .join('')}
+
+            </select>
+
+
+            <label
+              class="scorer-radio"
+            >
+
+              <input
+                type="radio"
+                name="scorer-${groupNo}"
+                ${
+                  player.scorer
+                    ? 'checked'
+                    : ''
+                }
+                onchange="
+                  setScorer(
+                    ${groupNo},
+                    '${safeJs(
+                      player.player_id
+                    )}'
+                  )
+                "
+              >
+
+              <div>
+                Scorer
+              </div>
+
+            </label>
+
+          `;
+
+
+          box
+            .appendChild(
+              row
+            );
 
         }
       );
 
 
-      const message =
-        document.getElementById(
-          "groupSaveMessage"
+      container
+        .appendChild(
+          box
+        );
+
+    }
+  );
+
+}
+
+
+
+function setGroupStart(
+  groupNo,
+  value
+) {
+
+  const start =
+    Number(value);
+
+
+  drawRows.forEach(
+    row => {
+
+      if (
+        Number(
+          row.group_no
+        ) ===
+        Number(groupNo)
+      ) {
+
+        row.start_hole =
+          start;
+
+      }
+
+    }
+  );
+
+}
+
+
+
+function movePlayer(
+  playerId,
+  newGroup
+) {
+
+  const row =
+    drawRows.find(
+      item =>
+        String(
+          item.player_id
+        ) ===
+        String(playerId)
+    );
+
+
+  if (!row) {
+    return;
+  }
+
+
+  row.group_no =
+    Number(newGroup);
+
+
+  row.scorer =
+    false;
+
+
+  normaliseScorers();
+
+  renderDraw();
+
+}
+
+
+
+function setScorer(
+  groupNo,
+  playerId
+) {
+
+  drawRows.forEach(
+    row => {
+
+      if (
+        Number(
+          row.group_no
+        ) ===
+        Number(groupNo)
+      ) {
+
+        row.scorer =
+          String(
+            row.player_id
+          ) ===
+          String(playerId);
+
+      }
+
+    }
+  );
+
+}
+
+
+
+function normaliseScorers() {
+
+  const groupNumbers =
+    [
+      ...new Set(
+        drawRows.map(
+          row =>
+            Number(
+              row.group_no
+            )
+        )
+      )
+    ];
+
+
+  groupNumbers.forEach(
+    groupNo => {
+
+      const members =
+        drawRows.filter(
+          row =>
+            Number(
+              row.group_no
+            ) === groupNo
         );
 
 
-      if (!groups.length) {
-
-        message.className =
-          "message error";
-
-        message.textContent =
-          "Select at least one player.";
+      if (!members.length) {
 
         return;
 
       }
 
 
-      const groupNumbers =
-        [
-          ...new Set(
-            groups.map(
-              group =>
-                group.group_no
-            )
-          )
-        ];
-
-
-      for (
-        const groupNumber
-        of groupNumbers
-      ) {
-
-        const members =
-          groups.filter(
-            group =>
-              group.group_no
-                === groupNumber
-          );
-
-
-        const scorers =
-          members.filter(
-            member =>
-              member.scorer
-          );
-
-
-        if (
-          members.length > 4
-        ) {
-
-          message.className =
-            "message error";
-
-          message.textContent =
-            `Group ${groupNumber} has more than four players.`;
-
-          return;
-
-        }
-
-
-        if (
-          scorers.length !== 1
-        ) {
-
-          message.className =
-            "message error";
-
-          message.textContent =
-            `Group ${groupNumber} needs exactly one scorer.`;
-
-          return;
-
-        }
-
-      }
-
-
-      try {
-
-        const result =
-          await apiPost({
-
-            action:
-              "saveGroups",
-
-            pin:
-              adminPinValue,
-
-            eventId:
-              currentEvent.event_id,
-
-            groups:
-              groups
-
-          });
-
-
-        if (!result.ok) {
-
-          throw new Error(
-            result.error ||
-            "Could not save groups"
-          );
-
-        }
-
-
-        allGroups =
-          groups;
-
-
-        message.className =
-          "message success";
-
-
-        message.textContent =
-          `${result.saved} player assignments saved.`;
-
-
-        await loadGroups();
-
-      }
-
-      catch (error) {
-
-        console.error(error);
-
-
-        message.className =
-          "message error";
-
-
-        message.textContent =
-          error.message;
-
-      }
-
-    }
-
-
-
-    async function refreshCurrentEvent() {
-
-      try {
-
-        const result =
-          await apiGet(
-            "currentEvent"
-          );
-
-
-        currentEvent =
-          result.event || null;
-
-
-        updateHomeEvent();
-
-      }
-
-      catch (error) {
-
-        console.error(error);
-
-      }
-
-    }
-
-
-
-    function setTodayDate() {
-
-      const input =
-        document.getElementById(
-          "eventDate"
+      const current =
+        members.filter(
+          row => row.scorer
         );
-
-
-      if (!input.value) {
-
-        const today =
-          new Date();
-
-
-        const year =
-          today.getFullYear();
-
-
-        const month =
-          String(
-            today.getMonth() + 1
-          ).padStart(
-            2,
-            "0"
-          );
-
-
-        const day =
-          String(
-            today.getDate()
-          ).padStart(
-            2,
-            "0"
-          );
-
-
-        input.value =
-          `${year}-${month}-${day}`;
-
-      }
-
-    }
-
-
-
-    function formatDate(value) {
-
-      if (!value) {
-        return "";
-      }
-
-
-      const date =
-        new Date(value);
 
 
       if (
-        Number.isNaN(
-          date.getTime()
-        )
+        current.length !== 1
       ) {
 
-        return value;
+        members.forEach(
+          row =>
+            row.scorer = false
+        );
+
+
+        members[0].scorer =
+          true;
 
       }
 
+    }
+  );
 
-      return date.toLocaleDateString(
-        "en-GB",
-        {
-          weekday:
-            "short",
-          day:
-            "numeric",
-          month:
-            "short"
-        }
+}
+
+
+
+async function saveGroupSetup() {
+
+  if (!adminEventId) {
+
+    showMessage(
+      'drawMessage',
+      'Create the round first.',
+      'bad'
+    );
+
+    return;
+
+  }
+
+
+  const validation =
+    validateDraw();
+
+
+  if (!validation.ok) {
+
+    showMessage(
+      'drawMessage',
+      validation.message,
+      'bad'
+    );
+
+    return;
+
+  }
+
+
+  try {
+
+    showMessage(
+      'drawMessage',
+      'Saving groups…',
+      'info'
+    );
+
+
+    await apiPost({
+
+      action:
+        'saveGroups',
+
+      pin:
+        adminPinValue,
+
+      eventId:
+        adminEventId,
+
+      groups:
+        drawRows.map(
+          row => ({
+
+            group_no:
+              Number(
+                row.group_no
+              ),
+
+            player_id:
+              row.player_id,
+
+            playing_handicap:
+              Number(
+                row.playing_handicap
+              ),
+
+            scorer:
+              Boolean(
+                row.scorer
+              ),
+
+            start_hole:
+              Number(
+                row.start_hole
+              ) || 1
+
+          })
+        )
+
+    });
+
+
+    currentEvent =
+      (
+        await apiGet(
+          'currentEvent'
+        )
+      ).event;
+
+
+    allGroups =
+      (
+        await apiGet(
+          'groups',
+          {
+            eventId:
+              adminEventId
+          }
+        )
+      ).groups;
+
+
+    showMessage(
+      'drawMessage',
+      'Groups saved. Saturday is ready.',
+      'good'
+    );
+
+  }
+
+  catch (err) {
+
+    showMessage(
+      'drawMessage',
+      err.message,
+      'bad'
+    );
+
+  }
+
+}
+
+
+
+function validateDraw() {
+
+  if (!drawRows.length) {
+
+    return {
+      ok: false,
+      message:
+        'No draw has been created.'
+    };
+
+  }
+
+
+  const groupNumbers =
+    [
+      ...new Set(
+        drawRows.map(
+          row =>
+            Number(
+              row.group_no
+            )
+        )
+      )
+    ];
+
+
+  for (
+    const groupNo
+    of groupNumbers
+  ) {
+
+    const members =
+      drawRows.filter(
+        row =>
+          Number(
+            row.group_no
+          ) === groupNo
       );
+
+
+    if (
+      members.length > 4
+    ) {
+
+      return {
+        ok: false,
+        message:
+          `Group ${groupNo} has more than four players.`
+      };
 
     }
 
 
+    const scorers =
+      members.filter(
+        row => row.scorer
+      );
 
-    initialise();
 
-  </script>
+    if (
+      scorers.length !== 1
+    ) {
+
+      return {
+        ok: false,
+        message:
+          `Group ${groupNo} needs one scorer.`
+      };
+
+    }
+
+  }
+
+
+  return {
+    ok: true
+  };
+
+}
+
+
+
+/* -------------------------
+   HELPERS
+------------------------- */
+
+
+function escapeHtml(value) {
+
+  return String(
+    value ?? ''
+  )
+  .replaceAll('&', '&amp;')
+  .replaceAll('<', '&lt;')
+  .replaceAll('>', '&gt;')
+  .replaceAll('"', '&quot;')
+  .replaceAll("'", '&#039;');
+
+}
+
+
+
+function escapeAttribute(value) {
+
+  return escapeHtml(value);
+
+}
+
+
+
+function safeJs(value) {
+
+  return String(
+    value ?? ''
+  )
+  .replaceAll('\\', '\\\\')
+  .replaceAll("'", "\\'");
+
+}
+
+
+
+function cssEscape(value) {
+
+  if (
+    window.CSS &&
+    CSS.escape
+  ) {
+
+    return CSS.escape(
+      String(value)
+    );
+
+  }
+
+
+  return String(value)
+    .replace(
+      /["\\]/g,
+      '\\$&'
+    );
+
+}
+
+
+
+initialise();
+
+</script>
+
 
 </body>
 
