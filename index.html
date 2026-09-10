@@ -2406,10 +2406,7 @@ function calculateHoleStrokes(
 async function saveAndNext() {
 
   const hole =
-    holeOrder[
-      holeIndex
-    ];
-
+    holeOrder[holeIndex];
 
   const missing =
     selectedGroup.filter(
@@ -2421,7 +2418,6 @@ async function saveAndNext() {
           player.player_id
         ] === undefined
     );
-
 
   if (missing.length) {
 
@@ -2435,123 +2431,84 @@ async function saveAndNext() {
 
   }
 
-
   const button =
     document.getElementById(
       'nextButton'
     );
 
-
   button.disabled = true;
-
-  button.textContent =
-    'Saving…';
-
+  button.textContent = 'Saving…';
 
   try {
 
-    for (
-      const player
-      of selectedGroup
-    ) {
+    const result =
+      await apiPost({
 
-      const result =
-        await apiPost({
+        action:
+          'saveHoleScores',
 
-          action:
-            'saveScore',
-
-          eventId:
-            currentEvent.event_id,
-
-          playerId:
-            player.player_id,
-
-          hole:
-            hole,
-
-          gross:
-            Number(
-              holeScores[
-                player.player_id
-              ]
-            )
-
-        });
-
-
-      const existing =
-        allScores.findIndex(
-          score =>
-            String(
-              score.player_id
-            ) ===
-            String(
-              player.player_id
-            ) &&
-            Number(
-              score.hole
-            ) === hole
-        );
-
-
-      const localScore = {
-
-        event_id:
+        eventId:
           currentEvent.event_id,
-
-        player_id:
-          player.player_id,
 
         hole:
           hole,
 
-        gross:
-          result.gross,
+        scores:
+          selectedGroup.map(
+            player => ({
 
-        net:
-          result.net,
+              playerId:
+                player.player_id,
 
-        stableford:
-          result.stableford,
+              gross:
+                Number(
+                  holeScores[
+                    player.player_id
+                  ]
+                )
 
-        blob:
-          result.blob,
+            })
+          )
 
-        birdie:
-          result.birdie,
+      });
 
-        eagle:
-          result.eagle
+    result.scores.forEach(
+      saved => {
 
-      };
+        const existing =
+          allScores.findIndex(
+            score =>
+              String(
+                score.player_id
+              ) ===
+              String(
+                saved.player_id
+              ) &&
+              Number(
+                score.hole
+              ) === hole
+          );
 
+        if (existing >= 0) {
 
-      if (
-        existing >= 0
-      ) {
+          allScores[existing] =
+            saved;
 
-        allScores[
-          existing
-        ] =
-          localScore;
+        } else {
+
+          allScores.push(
+            saved
+          );
+
+        }
 
       }
+    );
 
-      else {
+    if (holeIndex === 17) {
 
-        allScores.push(
-          localScore
-        );
-
-      }
-
-    }
-
-
-    if (
-      holeIndex === 17
-    ) {
+      button.textContent =
+        'Completing…';
 
       await apiPost({
 
@@ -2566,7 +2523,6 @@ async function saveAndNext() {
 
       });
 
-
       showScreen(
         'completeScreen'
       );
@@ -2574,7 +2530,6 @@ async function saveAndNext() {
       return;
 
     }
-
 
     holeIndex++;
 
@@ -2601,10 +2556,25 @@ async function saveAndNext() {
 
     button.disabled = false;
 
+    if (
+      document
+        .getElementById(
+          'scoreScreen'
+        )
+        .classList
+        .contains('active')
+    ) {
+
+      button.textContent =
+        holeIndex === 17
+          ? 'Complete Round'
+          : 'Save & Next';
+
+    }
+
   }
 
 }
-
 
 
 function previousHole() {
