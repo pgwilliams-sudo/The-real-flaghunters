@@ -2668,7 +2668,7 @@ async function refreshLeaderboard() {
           'leaderboardTable'
         )
         .innerHTML =
-          'No active round.';
+          'No round available.';
 
       return;
 
@@ -2755,6 +2755,10 @@ function renderLeaderboard(
           <th>Gross</th>
           <th>Net</th>
           <th>Pts</th>
+          <th>Blobs</th>
+          <th>Birdies</th>
+          <th>Eagles</th>
+          <th>Holes</th>
         </tr>
 
       </thead>
@@ -2787,26 +2791,36 @@ function renderLeaderboard(
               )}
             </span>
 
-            <span
-              class="leader-meta"
-            >
-              ${row.holes}/18 holes
-            </span>
-
           </td>
 
           <td>
-            ${row.gross}
+            ${row.gross || 0}
           </td>
 
           <td>
-            ${row.net}
+            ${row.net || 0}
           </td>
 
           <td
             class="big-points"
           >
-            ${row.stableford}
+            ${row.stableford || 0}
+          </td>
+
+          <td>
+            ${row.blobs || 0}
+          </td>
+
+          <td>
+            ${row.birdies || 0}
+          </td>
+
+          <td>
+            ${row.eagles || 0}
+          </td>
+
+          <td>
+            ${row.holes || 0}/18
           </td>
 
         </tr>
@@ -2830,7 +2844,6 @@ function renderLeaderboard(
     html;
 
 }
-
 
 
 function closeLeaderboard() {
@@ -3992,10 +4005,8 @@ async function saveGroupSetup() {
 
   }
 
-
   const validation =
     validateDraw();
-
 
   if (!validation.ok) {
 
@@ -4009,15 +4020,21 @@ async function saveGroupSetup() {
 
   }
 
-
-  try {
-
-    showMessage(
-      'drawMessage',
-      'Saving groups…',
-      'info'
+  const saveButton =
+    document.querySelector(
+      '#drawCard .primary-button'
     );
 
+  if (saveButton) {
+
+    saveButton.disabled = true;
+
+    saveButton.textContent =
+      'Saving…';
+
+  }
+
+  try {
 
     await apiPost({
 
@@ -4062,31 +4079,83 @@ async function saveGroupSetup() {
 
     });
 
-
-    currentEvent =
-      (
-        await apiGet(
-          'currentEvent'
-        )
-      ).event;
-
-
     allGroups =
-      (
-        await apiGet(
-          'groups',
-          {
-            eventId:
-              adminEventId
-          }
-        )
-      ).groups;
+      drawRows.map(
+        row => ({
 
+          event_id:
+            adminEventId,
 
-    showMessage(
-      'drawMessage',
-      'Groups saved. Saturday is ready.',
-      'good'
+          group_no:
+            Number(
+              row.group_no
+            ),
+
+          player_id:
+            row.player_id,
+
+          player_name:
+            row.player_name,
+
+          playing_handicap:
+            Number(
+              row.playing_handicap
+            ),
+
+          scorer:
+            Boolean(
+              row.scorer
+            ),
+
+          start_hole:
+            Number(
+              row.start_hole
+            ) || 1
+
+        })
+      );
+
+    currentEvent = {
+
+      event_id:
+        adminEventId,
+
+      date:
+        document
+          .getElementById(
+            'eventDate'
+          )
+          .value,
+
+      course:
+        'Brickendon Grange',
+
+      tee:
+        document
+          .getElementById(
+            'eventTee'
+          )
+          .value,
+
+      status:
+        'active',
+
+      completed:
+        false
+
+    };
+
+    document
+      .getElementById(
+        'headerStatus'
+      )
+      .textContent =
+        formatEvent(
+          currentEvent
+        );
+
+    showScreen(
+      'homeScreen'
     );
 
   }
@@ -4101,8 +4170,20 @@ async function saveGroupSetup() {
 
   }
 
-}
+  finally {
 
+    if (saveButton) {
+
+      saveButton.disabled = false;
+
+      saveButton.textContent =
+        'Save Groups';
+
+    }
+
+  }
+
+}
 
 
 function validateDraw() {
