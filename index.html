@@ -2472,38 +2472,41 @@ async function saveAndNext() {
 
       });
 
-    result.scores.forEach(
-      saved => {
+    const savedScores =
+  result.scores || [];
 
-        const existing =
-          allScores.findIndex(
-            score =>
-              String(
-                score.player_id
-              ) ===
-              String(
-                saved.player_id
-              ) &&
-              Number(
-                score.hole
-              ) === hole
-          );
+savedScores.forEach(
+  saved => {
 
-        if (existing >= 0) {
+    const existing =
+      allScores.findIndex(
+        score =>
+          String(
+            score.player_id
+          ) ===
+          String(
+            saved.player_id
+          ) &&
+          Number(
+            score.hole
+          ) === hole
+      );
 
-          allScores[existing] =
-            saved;
+    if (existing >= 0) {
 
-        } else {
+      allScores[existing] =
+        saved;
 
-          allScores.push(
-            saved
-          );
+    } else {
 
-        }
+      allScores.push(
+        saved
+      );
 
-      }
-    );
+    }
+
+  }
+);
 
     if (holeIndex === 17) {
 
