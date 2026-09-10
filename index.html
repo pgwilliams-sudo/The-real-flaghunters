@@ -3452,10 +3452,17 @@ function getSelectedAdminPlayers() {
 
 
         const handicapInput =
-          document
-            .querySelector(
-              `.player-handicap[data-player-id="${cssEscape(id)}"]`
-            );
+  Array.from(
+    document.querySelectorAll(
+      '.player-handicap'
+    )
+  ).find(
+    input =>
+      String(
+        input.dataset.playerId
+      ) ===
+      String(id)
+  );
 
 
         const handicap =
