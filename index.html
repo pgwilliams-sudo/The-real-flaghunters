@@ -420,12 +420,50 @@
 
   <script>
 
-    const names = [
-      "Pete",
-      "Player 2",
-      "Player 3",
-      "Player 4"
+    const API_URL =
+  "https://script.google.com/macros/s/AKfycbwIF6kDgwcYkhc_HpvrorPLvJRv21f9sm8yyzng_mSU1SWunT9BTGGLv1JdbJImnXYLXg/exec";
+
+let names = [
+  "Loading..."
+];
+
+async function loadPlayers() {
+  try {
+    const response = await fetch(
+      API_URL + "?action=players"
+    );
+
+    const data = await response.json();
+
+    if (!data.ok) {
+      throw new Error(
+        data.error || "Could not load players"
+      );
+    }
+
+    names = data.players
+      .filter(player => player.active !== false)
+      .map(player => player.name);
+
+    scores = Array(names.length).fill(
+      course[hole - 1][0]
+    );
+
+    render();
+
+  } catch (error) {
+
+    console.error(error);
+
+    names = [
+      "Could not load players"
     ];
+
+    scores = [course[hole - 1][0]];
+
+    render();
+  }
+}
 
 
     const course = [
@@ -656,7 +694,7 @@
     }
 
 
-    render();
+    loadPlayers();
 
   </script>
 
