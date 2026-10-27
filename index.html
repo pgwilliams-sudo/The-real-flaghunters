@@ -809,6 +809,17 @@
         for your group.
       </p>
 
+<div id="groupFinishResults"
+     style="text-align:left;margin:18px 0">
+</div>
+
+<button
+  class="secondary-button"
+  onclick="editFinishedGroup()"
+>
+  Edit Scores
+</button>
+
       <button
         class="primary-button"
         onclick="openLeaderboard()"
@@ -1163,6 +1174,80 @@ WHS Handicap Index. Use + for plus handicaps.
 
   <div
     id="adminCompetitionMessage"
+    class="message hidden"
+  ></div>
+</div>
+
+<div
+  id="adminPinCorrectionCard"
+  class="card hidden"
+>
+  <div class="sub-title">
+    Correct Nearest the Pin
+  </div>
+
+  <p class="small-label">
+    Administrator corrections can be made
+    during play or after the round finishes.
+    Every change is recorded in the audit history.
+  </p>
+
+  <div class="field">
+    <label for="adminPinCorrectionHole">
+      Hole
+    </label>
+
+    <select
+      id="adminPinCorrectionHole"
+      onchange="refreshAdminPinCorrection()"
+    >
+      <option value="">
+        Select hole
+      </option>
+    </select>
+  </div>
+
+  <div
+    id="adminPinCurrentWinner"
+    class="message info"
+  >
+    Select a hole to view its current leader.
+  </div>
+
+  <div class="field">
+    <label for="adminPinCorrectionPlayer">
+      Correct winner
+    </label>
+
+    <select id="adminPinCorrectionPlayer">
+      <option value="">
+        No winner / clear result
+      </option>
+    </select>
+  </div>
+
+  <div class="field">
+    <label for="adminPinCorrectionReason">
+      Reason for correction
+    </label>
+
+    <textarea
+      id="adminPinCorrectionReason"
+      rows="3"
+      placeholder="Explain why the result needs correcting"
+    ></textarea>
+  </div>
+
+  <button
+    id="adminPinCorrectionButton"
+    class="primary-button"
+    onclick="saveAdminPinCorrection()"
+  >
+    Save Correction
+  </button>
+
+  <div
+    id="adminPinCorrectionMessage"
     class="message hidden"
   ></div>
 </div>
@@ -2372,7 +2457,7 @@ ${
   ) {
 
     button.textContent =
-      'Complete Round';
+  'Finish Group';
 
   }
 
@@ -2694,6 +2779,58 @@ function calculateHoleStrokes(playingHandicap, strokeIndex) {
 
 async function saveAndNext() {
 
+
+
+  const currentHole = Number(holeOrder[holeIndex]);
+
+  try {
+    const competition = await apiGet('competitions', {
+      eventId: currentEvent.event_id
+    });
+
+    const config = competition.config || {};
+
+    if (
+      config.nearest_enabled &&
+      (config.nearest_holes || [])
+        .map(Number)
+        .includes(currentHole)
+    ) {
+      const acknowledgements =
+        competition.pin_acknowledgements || {};
+
+      const decisions =
+        acknowledgements[currentHole] || {};
+
+      const acknowledged =
+        Object.prototype.hasOwnProperty.call(
+          decisions,
+          String(selectedGroupNumber)
+        );
+
+      if (!acknowledged) {
+        showMessage(
+          'scoreMessage',
+          'Record your Nearest the Pin decision ' +
+          'for hole ' + currentHole +
+          ' before continuing.',
+          'bad'
+        );
+        return;
+      }
+    }
+  } catch (err) {
+    showMessage(
+      'scoreMessage',
+      'Unable to verify Nearest the Pin: ' +
+      err.message,
+      'bad'
+    );
+    return;
+  }
+
+
+  
   const hole =
     holeOrder[holeIndex];
 
@@ -2797,31 +2934,24 @@ savedScores.forEach(
   }
 );
 
-    if (holeIndex === 17) {
+    
+if (holeIndex === 17) {
+  button.textContent = 'Finishing…';
 
-      button.textContent =
-        'Completing…';
+  const finishResult = await apiPost({
+    action: 'completeGroup',
+    eventId: currentEvent.event_id,
+    groupNo: selectedGroupNumber
+  });
 
-      await apiPost({
+  await renderFinishedGroupResults(
+  finishResult.group_results || []
+);
 
-        action:
-          'completeGroup',
+  showScreen('completeScreen');
+  return;
+}
 
-        eventId:
-          currentEvent.event_id,
-
-        groupNo:
-          selectedGroupNumber
-
-      });
-
-      showScreen(
-        'completeScreen'
-      );
-
-      return;
-
-    }
 
     holeIndex++;
 
@@ -2859,7 +2989,7 @@ savedScores.forEach(
 
       button.textContent =
         holeIndex === 17
-          ? 'Complete Round'
+          ? 'Finish Group'
           : 'Save & Next';
 
     }
@@ -3296,6 +3426,22 @@ async function adminLogin() {
     showScreen(
       'adminScreen'
     );
+
+    try {
+      const eventData = await apiGet('currentEvent');
+
+      currentEvent = eventData.event || null;
+
+      await loadAdminPinCorrection();
+
+    } catch (loadError) {
+      showMessage(
+        'eventMessage',
+        'Admin opened, but existing round data ' +
+        'could not be loaded: ' + loadError.message,
+        'bad'
+      );
+    }
 
   }
 
@@ -4751,11 +4897,14 @@ function renderNearestPin() {
     const players = members();
     const pairs = competitionData.blind_pairs || [];
 
-    const complete =
-      players.length > 0 &&
-      players.every(p =>
-        playerFinished(p.player_id)
-      );
+    
+const complete =
+  players.length > 0 &&
+  players.every(p =>
+    playerFinished(p.player_id)
+  ) &&
+  competitionData.all_groups_finished === true;
+
 
     let html = `
       <div class="card">
@@ -4896,14 +5045,68 @@ function renderNearestPin() {
     return html + '</div>';
   }
 
-  function render() {
-    const config = competitionData.config || {};
 
-el('competitionContent').innerHTML =
-  renderNearestPin() +
-  (config.blind_enabled ? renderBlindPairs() : '') +
-  (config.team234_enabled ? render234() : '');
-  }
+function renderGroupStatus() {
+  const numbers = [
+    ...new Set(
+      groups.map(p => Number(p.group_no))
+    )
+  ].sort((a, b) => a - b);
+
+  if (!numbers.length) return '';
+
+  const finished = new Set(
+    (competitionData.group_status || [])
+      .map(r => Number(r.group_no))
+  );
+
+  let html = `
+    <div class="card">
+      <div class="sub-title">
+        ⛳ Group Progress
+      </div>
+  `;
+
+  numbers.forEach(no => {
+    const members = groups.filter(p =>
+      Number(p.group_no) === no
+    );
+
+    const finishedCount = members.filter(p =>
+      playerFinished(p.player_id)
+    ).length;
+
+    const isFinished = finished.has(no);
+
+    html += `
+      <p>
+        <strong>Group ${no}</strong>
+        <span style="float:right">
+          ${isFinished
+            ? '✅ Finished'
+            : finishedCount === members.length
+              ? '18 holes saved · Awaiting Finish'
+              : finishedCount + '/' +
+                members.length + ' players complete'}
+        </span>
+      </p>
+    `;
+  });
+
+  return html + '</div>';
+}
+
+  
+  
+function render() {
+  const config = competitionData.config || {};
+
+  el('competitionContent').innerHTML =
+    renderGroupStatus() +
+    renderNearestPin() +
+    (config.blind_enabled ? renderBlindPairs() : '') +
+    (config.team234_enabled ? render234() : '');
+}
 
   async function open() {
     showScreen('competitionScreen');
@@ -5192,6 +5395,17 @@ async function saveAdminCompetitions() {
       ).checked
     });
 
+    const eventData = await apiGet('currentEvent');
+
+    if (
+      eventData.event &&
+      String(eventData.event.event_id) ===
+        String(adminEventId)
+    ) {
+      currentEvent = eventData.event;
+      await loadAdminPinCorrection();
+    }
+
     showMessage(
       'adminCompetitionMessage',
       'Competition setup saved.',
@@ -5210,18 +5424,21 @@ async function saveAdminCompetitions() {
 
 
 <script>
+
+<script>
 /* v3.5 - Rolling Nearest the Pin scoring */
 
 (function () {
   const originalRenderScoring = renderScoring;
   let pinRenderVersion = 0;
+  let submitting = false;
 
   renderScoring = function () {
     originalRenderScoring();
     showLivePinControl();
   };
 
-  async function showLivePinControl() {
+  async function showLivePinControl(successMessage) {
     const version = ++pinRenderVersion;
 
     if (!currentEvent || !selectedGroup.length) {
@@ -5236,6 +5453,12 @@ async function saveAdminCompetitions() {
     );
 
     if (!container) return;
+
+    const oldPanel = document.getElementById(
+      'livePinPanel'
+    );
+
+    if (oldPanel) oldPanel.remove();
 
     const panel = document.createElement('div');
     panel.id = 'livePinPanel';
@@ -5254,17 +5477,18 @@ async function saveAdminCompetitions() {
         version !== pinRenderVersion ||
         Number(holeOrder[holeIndex]) !== hole ||
         Number(selectedGroupNumber) !== groupNo ||
-        !document.getElementById('livePinPanel')
+        document.getElementById('livePinPanel') !== panel
       ) {
         return;
       }
 
       const config = response.config || {};
-      const holes = config.nearest_holes || [];
+      const holes = (config.nearest_holes || [])
+        .map(Number);
 
       if (
         !config.nearest_enabled ||
-        !holes.map(Number).includes(hole)
+        !holes.includes(hole)
       ) {
         panel.remove();
         return;
@@ -5273,41 +5497,77 @@ async function saveAdminCompetitions() {
       const leaderId = String(
         (response.nearest_pins || {})[hole] || ''
       );
-panel.dataset.expectedLeader = leaderId;
+
+      panel.dataset.expectedLeader = leaderId;
+
       const leader = allGroups.find(p =>
         String(p.player_id) === leaderId
       );
 
       const leaderName = leader
-        ? leader.player_name
-        : leaderId === 'none'
-          ? 'No winner yet'
-          : leaderId || 'No leader yet';
+  ? leader.player_name
+  : leaderId
+    ? 'Player ' + leaderId
+    : 'No leader yet';
+
+      const acknowledgements =
+        response.pin_acknowledgements || {};
+
+      const holeDecisions =
+        acknowledgements[hole] || {};
+
+      const decision =
+        holeDecisions[String(groupNo)] || null;
+
+      const alreadyRecorded = Boolean(decision);
 
       const options = selectedGroup.map(p => `
-        <option value="${escapeHtml(String(p.player_id))}">
+        <option value="${escapeAttribute(p.player_id)}">
           ${escapeHtml(p.player_name)}
         </option>
       `).join('');
+
+      const statusHtml = alreadyRecorded
+        ? `
+          <div class="message good">
+            ✓ Group ${groupNo} has recorded
+            its decision for this hole.
+            You can update it below.
+          </div>
+        `
+        : `
+          <div class="message info">
+            Your group has not yet recorded
+            its decision for this hole.
+          </div>
+        `;
 
       panel.innerHTML = `
         <div class="sub-title">
           🎯 Nearest the Pin · Hole ${hole}
         </div>
 
+        ${statusHtml}
+
         <p class="small-label">
           Current leader
         </p>
 
-        <p><strong>${escapeHtml(leaderName)}</strong></p>
+        <p>
+          <strong>${escapeHtml(leaderName)}</strong>
+        </p>
 
         <p class="small-label">
-          Only select a new leader if someone
-          in your group is closer.
+          Keep the current leader if nobody
+          in your group is closer. Otherwise,
+          select the new leader.
         </p>
 
         <div class="field">
-          <label>New leader</label>
+          <label for="livePinPlayer">
+            New leader
+          </label>
+
           <select id="livePinPlayer">
             <option value="">Select player</option>
             ${options}
@@ -5336,16 +5596,51 @@ panel.dataset.expectedLeader = leaderId;
         ></div>
       `;
 
+      if (successMessage) {
+        showMessage(
+          'livePinMessage',
+          successMessage,
+          'good'
+        );
+      }
+
     } catch (err) {
-      panel.innerHTML =
-        '<p>Pin competition unavailable: ' +
-        escapeHtml(err.message) + '</p>';
+      if (
+        version !== pinRenderVersion ||
+        document.getElementById('livePinPanel') !== panel
+      ) {
+        return;
+      }
+
+      panel.innerHTML = `
+        <p class="message bad">
+          Nearest the Pin unavailable:
+          ${escapeHtml(err.message)}
+        </p>
+
+        <button
+          class="secondary-button"
+          onclick="renderScoring()"
+        >
+          Retry
+        </button>
+      `;
     }
   }
 
   window.submitLivePin = async function (pinAction) {
+    if (submitting) return;
+
+    const panel = document.getElementById(
+      'livePinPanel'
+    );
+
+    if (!panel) return;
+
+    const eventId = currentEvent.event_id;
     const hole = Number(holeOrder[holeIndex]);
     const groupNo = Number(selectedGroupNumber);
+
     const select = document.getElementById(
       'livePinPlayer'
     );
@@ -5369,46 +5664,357 @@ panel.dataset.expectedLeader = leaderId;
       'challengePinButton'
     );
 
+    submitting = true;
     keepButton.disabled = true;
     challengeButton.disabled = true;
 
     try {
       await apiPost({
-  action: 'updatePinLeader',
-  eventId: currentEvent.event_id,
-  hole: hole,
-  groupNo: groupNo,
-  pinAction: pinAction,
-  playerId: pinAction === 'challenge'
-    ? playerId
-    : '',
-  expectedLeader:
-    document.getElementById('livePinPanel')
-      .dataset.expectedLeader || ''
-});
+        action: 'updatePinLeader',
+        eventId: eventId,
+        hole: hole,
+        groupNo: groupNo,
+        pinAction: pinAction,
+        playerId: pinAction === 'challenge'
+          ? playerId
+          : '',
+        expectedLeader:
+          panel.dataset.expectedLeader || ''
+      });
 
-      await showLivePinControl();
-
-      showMessage(
-        'livePinMessage',
+      const successMessage =
         pinAction === 'challenge'
-          ? 'New pin leader recorded.'
-          : 'Current leader retained.',
-        'good'
-      );
+          ? 'New pin leader recorded successfully.'
+          : 'Current pin leader confirmed.';
+
+      if (
+        currentEvent.event_id === eventId &&
+        Number(holeOrder[holeIndex]) === hole &&
+        Number(selectedGroupNumber) === groupNo
+      ) {
+        await showLivePinControl(successMessage);
+      }
 
     } catch (err) {
-      showMessage(
-        'livePinMessage',
-        err.message,
-        'bad'
+      const messageBox = document.getElementById(
+        'livePinMessage'
       );
 
-      keepButton.disabled = false;
-      challengeButton.disabled = false;
+      if (messageBox) {
+        showMessage(
+          'livePinMessage',
+          err.message +
+            ' Refresh this hole before trying again.',
+          'bad'
+        );
+      }
+
+    } finally {
+      submitting = false;
+
+      const currentKeep = document.getElementById(
+        'keepPinButton'
+      );
+
+      const currentChallenge = document.getElementById(
+        'challengePinButton'
+      );
+
+      if (currentKeep) currentKeep.disabled = false;
+      if (currentChallenge) currentChallenge.disabled = false;
     }
   };
 })();
+</script>
+
+<script>
+/* v3.5 - Finished group results */
+
+
+async function renderFinishedGroupResults(rows) {
+  const container = document.getElementById(
+    'groupFinishResults'
+  );
+
+  const ordered = [...rows].sort(
+    (a, b) =>
+      Number(b.stableford) - Number(a.stableford)
+  );
+
+  let html = `
+    <div class="sub-title">
+      Group ${selectedGroupNumber} Results
+    </div>
+  `;
+
+  ordered.forEach(player => {
+    html += `
+      <p>
+        <strong>${escapeHtml(player.name)}</strong>
+        <span style="float:right">
+          ${Number(player.stableford)} pts
+        </span>
+      </p>
+    `;
+  });
+
+  container.innerHTML = html;
+
+  try {
+    const data = await apiGet('competitions', {
+      eventId: currentEvent.event_id
+    });
+
+    const latestScores = await apiGet('scores', {
+      eventId: currentEvent.event_id
+    });
+
+    allScores = latestScores.scores || [];
+
+    if (!(data.config || {}).team234_enabled) {
+      return;
+    }
+
+    let total = 0;
+    let completedHoles = 0;
+
+    for (let hole = 1; hole <= 18; hole++) {
+      const points = selectedGroup.map(player => {
+        const score = allScores.find(s =>
+          String(s.player_id) ===
+            String(player.player_id) &&
+          Number(s.hole) === hole
+        );
+
+        return score
+          ? Number(score.stableford)
+          : null;
+      });
+
+      if (points.some(p => p === null)) {
+        continue;
+      }
+
+      const counting = 2 + ((hole - 1) % 3);
+
+      points.sort((a, b) => b - a);
+
+      total += points.slice(0, counting)
+        .reduce((sum, p) => sum + p, 0);
+
+      completedHoles++;
+    }
+
+    container.innerHTML += `
+      <hr style="margin:20px 0">
+
+      <div class="sub-title">
+        🏆 2/3/4 Team Result
+      </div>
+
+      <p>
+        <strong>Group ${selectedGroupNumber}</strong>
+        <span style="float:right">
+          ${total} pts
+        </span>
+      </p>
+
+      <p class="small-label">
+        ${completedHoles}/18 holes counted
+      </p>
+    `;
+
+  } catch (err) {
+    container.innerHTML += `
+      <p class="small-label">
+        Team result unavailable:
+        ${escapeHtml(err.message)}
+      </p>
+    `;
+  }
+}
+
+
+function editFinishedGroup() {
+  holeIndex = 17;
+  renderScoring();
+  showScreen('scoreScreen');
+}
+</script>
+  
+
+<script>
+/* v3.5 - Admin Nearest the Pin corrections */
+
+let adminPinCorrectionData = null;
+let adminPinCorrectionEventId = '';
+
+async function loadAdminPinCorrection() {
+  const card = document.getElementById(
+    'adminPinCorrectionCard'
+  );
+
+  const eventId = currentEvent
+    ? String(currentEvent.event_id)
+    : '';
+
+  card.classList.add('hidden');
+
+  if (!eventId) return;
+
+  try {
+    const [competition, groupsData] = await Promise.all([
+      apiGet('competitions', { eventId }),
+      apiGet('groups', { eventId })
+    ]);
+
+    if (
+      !competition.config ||
+      !competition.config.nearest_enabled ||
+      !(competition.config.nearest_holes || []).length
+    ) {
+      return;
+    }
+
+    adminPinCorrectionData = competition;
+    adminPinCorrectionEventId = eventId;
+
+    const groups = groupsData.groups || [];
+
+    const playerSelect = document.getElementById(
+      'adminPinCorrectionPlayer'
+    );
+
+    playerSelect.innerHTML = `
+      <option value="">No winner / clear result</option>
+      ${groups.map(p => `
+        <option value="${escapeAttribute(p.player_id)}">
+          ${escapeHtml(p.player_name)}
+        </option>
+      `).join('')}
+    `;
+
+    const holeSelect = document.getElementById(
+      'adminPinCorrectionHole'
+    );
+
+    holeSelect.innerHTML = `
+      <option value="">Select hole</option>
+      ${competition.config.nearest_holes.map(hole => `
+        <option value="${Number(hole)}">
+          Hole ${Number(hole)}
+        </option>
+      `).join('')}
+    `;
+
+    document.getElementById(
+      'adminPinCorrectionReason'
+    ).value = '';
+
+    card.classList.remove('hidden');
+
+    refreshAdminPinCorrection();
+
+  } catch (err) {
+    showMessage(
+      'adminCompetitionMessage',
+      'Unable to load pin corrections: ' + err.message,
+      'bad'
+    );
+  }
+}
+
+function refreshAdminPinCorrection() {
+  const hole = Number(document.getElementById(
+    'adminPinCorrectionHole'
+  ).value);
+
+  const display = document.getElementById(
+    'adminPinCurrentWinner'
+  );
+
+  const playerSelect = document.getElementById(
+    'adminPinCorrectionPlayer'
+  );
+
+  if (!hole || !adminPinCorrectionData) {
+    display.textContent =
+      'Select a hole to view its current leader.';
+    playerSelect.value = '';
+    return;
+  }
+
+  const winnerId = String(
+    (adminPinCorrectionData.nearest_pins || {})[hole] || ''
+  );
+
+  const option = Array.from(playerSelect.options)
+    .find(o => o.value === winnerId);
+
+  display.textContent = winnerId
+    ? 'Current leader: ' +
+      (option ? option.textContent.trim() : winnerId)
+    : 'No leader recorded yet.';
+
+  playerSelect.value = winnerId;
+}
+
+async function saveAdminPinCorrection() {
+  const button = document.getElementById(
+    'adminPinCorrectionButton'
+  );
+
+  const hole = Number(document.getElementById(
+    'adminPinCorrectionHole'
+  ).value);
+
+  const playerId = document.getElementById(
+    'adminPinCorrectionPlayer'
+  ).value;
+
+  const reason = document.getElementById(
+    'adminPinCorrectionReason'
+  ).value.trim();
+
+  if (!hole || !reason) {
+    showMessage(
+      'adminPinCorrectionMessage',
+      'Select a hole and enter a correction reason.',
+      'bad'
+    );
+    return;
+  }
+
+  button.disabled = true;
+
+  try {
+    await apiPost({
+      action: 'correctPinWinner',
+      pin: adminPinValue,
+      eventId: adminPinCorrectionEventId,
+      hole,
+      playerId,
+      reason
+    });
+
+    await loadAdminPinCorrection();
+
+    showMessage(
+      'adminPinCorrectionMessage',
+      'Nearest the Pin correction saved.',
+      'good'
+    );
+
+  } catch (err) {
+    showMessage(
+      'adminPinCorrectionMessage',
+      err.message,
+      'bad'
+    );
+  } finally {
+    button.disabled = false;
+  }
+}
 </script>
 
   
