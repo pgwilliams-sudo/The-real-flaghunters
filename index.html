@@ -1124,6 +1124,49 @@ WHS Handicap Index. Use + for plus handicaps.
 
     </div>
 
+<div id="adminCompetitionsCard" class="card hidden">
+  <div class="sub-title">
+    4. Saturday Competitions
+  </div>
+
+  <p class="small-label">
+    Choose the competitions before play starts.
+  </p>
+
+  <label class="toggle-row">
+    <input
+      id="adminNearestEnabled"
+      type="checkbox"
+      onchange="refreshAdminCompetitionHoles()"
+    >
+    Nearest the Pin
+  </label>
+
+  <div id="adminNearestHoles"></div>
+
+  <label class="toggle-row">
+    <input id="adminBlindEnabled" type="checkbox">
+    Blind Pairs
+  </label>
+
+  <label class="toggle-row">
+    <input id="admin234Enabled" type="checkbox">
+    2/3/4 Team Game
+  </label>
+
+  <button
+    class="primary-button"
+    onclick="saveAdminCompetitions()"
+  >
+    Save Competitions
+  </button>
+
+  <div
+    id="adminCompetitionMessage"
+    class="message hidden"
+  ></div>
+</div>
+
   </main>
 
 
@@ -4366,9 +4409,9 @@ handicap_confirmed: false,
           currentEvent
         );
 
-    showScreen(
-      'homeScreen'
-    );
+    await openAdminCompetitionSetup();
+
+showScreen('adminScreen');
 
   }
 
@@ -4665,104 +4708,44 @@ initialise();
     courseRows = results[3].course || [];
   }
 
-  function renderNearestPin() {
-    const config = competitionData.config || {};
-    const chosen = config.nearest_holes || [];
-    const winners = competitionData.nearest_pins || {};
+  
+function renderNearestPin() {
+  const config = competitionData.config || {};
 
-    let html = `
-      <div class="card">
-        <div class="sub-title">🎯 Nearest the Pin</div>
-        <p class="small-label">
-          Select the par-3 holes to include.
-          This competition is optional.
-        </p>
-        <label class="toggle-row">
-          <input
-            id="competitionPinEnabled"
-            type="checkbox"
-            ${config.nearest_enabled ? 'checked' : ''}
-          >
-          Enable Nearest the Pin
-        </label>
-        <p><strong>Selected holes</strong></p>
-    `;
+  if (!config.nearest_enabled) {
+    return '';
+  }
 
-    parThreeHoles().forEach(hole => {
-      html += `
-        <label style="display:inline-block;
-                      margin:8px 16px 8px 0">
-          <input
-            type="checkbox"
-            class="competitionHole"
-            value="${hole}"
-            ${chosen.includes(hole) ? 'checked' : ''}
-          >
-          Hole ${hole}
-        </label>
-      `;
-    });
+  const chosen = config.nearest_holes || [];
+  const winners = competitionData.nearest_pins || {};
+
+  let html = `
+    <div class="card">
+      <div class="sub-title">
+        🎯 Nearest the Pin
+      </div>
+      <p class="small-label">
+        Leaders update as each group plays.
+      </p>
+  `;
+
+  chosen.forEach(hole => {
+    const id = String(winners[hole] || '');
+    const name = id && id !== 'none'
+      ? playerName(id)
+      : 'No leader yet';
 
     html += `
-        <button
-          class="secondary-button"
-          onclick="saveCompetitionSetupUI()"
-        >
-          Save competition setup
-        </button>
+      <p>
+        <strong>Hole ${Number(hole)}</strong>
+        · ${escapeCompetitionText(name)}
+      </p>
     `;
+  });
 
-    if (config.nearest_enabled && chosen.length) {
-      html += `
-        <hr>
-        <p><strong>Record winners</strong></p>
-      `;
+  return html + '</div>';
+}
 
-      chosen.forEach(hole => {
-        html += `
-          <div class="field">
-            <label>Hole ${hole}</label>
-            <select
-              class="competitionWinner"
-              data-hole="${hole}"
-            >
-              <option value="">
-                Not recorded yet
-              </option>
-              <option value="none"
-                ${winners[hole] === 'none'
-                  ? 'selected' : ''}>
-                No winner
-              </option>
-        `;
-
-        members().forEach(p => {
-          const id = String(p.player_id);
-
-          html += `
-            <option value="${escapeCompetitionText(id)}"
-              ${String(winners[hole]) === id
-                ? 'selected' : ''}>
-              ${escapeCompetitionText(p.player_name)}
-            </option>
-          `;
-        });
-
-        html += '</select></div>';
-      });
-
-      html += `
-        <button
-          class="secondary-button"
-          onclick="saveCompetitionPinsUI()"
-        >
-          Save pin winners
-        </button>
-      `;
-    }
-
-    return html + '</div>';
-  }
 
   function renderBlindPairs() {
     const players = members();
@@ -4914,10 +4897,12 @@ initialise();
   }
 
   function render() {
-    el('competitionContent').innerHTML =
-      renderNearestPin() +
-      renderBlindPairs() +
-      render234();
+    const config = competitionData.config || {};
+
+el('competitionContent').innerHTML =
+  renderNearestPin() +
+  (config.blind_enabled ? renderBlindPairs() : '') +
+  (config.team234_enabled ? render234() : '');
   }
 
   async function open() {
@@ -5074,6 +5059,358 @@ initialise();
   );
 })();
 </script>
+
+
+<script>
+/* v3.5 - Competition setup in Admin */
+
+async function openAdminCompetitionSetup() {
+  if (!adminEventId) return;
+
+  const card = document.getElementById(
+    'adminCompetitionsCard'
+  );
+
+  card.classList.remove('hidden');
+
+  try {
+    const results = await Promise.all([
+      apiGet('competitions', {
+        eventId: adminEventId
+      }),
+      apiGet('course')
+    ]);
+
+    const config = results[0].config || {};
+    const holes = results[1].course || [];
+
+    document.getElementById(
+      'adminNearestEnabled'
+    ).checked = Boolean(config.nearest_enabled);
+
+    document.getElementById(
+      'adminBlindEnabled'
+    ).checked = Boolean(config.blind_enabled);
+
+    document.getElementById(
+      'admin234Enabled'
+    ).checked = Boolean(config.team234_enabled);
+
+    const tee = document.getElementById(
+      'eventTee'
+    ).value;
+
+    const par3s = holes.filter(h =>
+      String(h.course) === 'Brickendon Grange' &&
+      String(h.tee) === tee &&
+      Number(h.par) === 3
+    );
+
+    const selected = config.nearest_holes || [];
+
+    document.getElementById(
+      'adminNearestHoles'
+    ).innerHTML = par3s.map(h => {
+      const hole = Number(h.hole);
+
+      return `
+        <label style="display:inline-block;
+                      margin:8px 16px 8px 0">
+          <input
+            type="checkbox"
+            class="adminPinHole"
+            value="${hole}"
+            ${selected.includes(hole) ? 'checked' : ''}
+          >
+          Hole ${hole}
+        </label>
+      `;
+    }).join('');
+
+    refreshAdminCompetitionHoles();
+
+  } catch (err) {
+    showMessage(
+      'adminCompetitionMessage',
+      err.message,
+      'bad'
+    );
+  }
+}
+
+function refreshAdminCompetitionHoles() {
+  const enabled = document.getElementById(
+    'adminNearestEnabled'
+  ).checked;
+
+  document.getElementById(
+    'adminNearestHoles'
+  ).style.display = enabled ? 'block' : 'none';
+}
+
+async function saveAdminCompetitions() {
+  if (!adminEventId) {
+    showMessage(
+      'adminCompetitionMessage',
+      'Save the groups first.',
+      'bad'
+    );
+    return;
+  }
+
+  const nearestEnabled = document.getElementById(
+    'adminNearestEnabled'
+  ).checked;
+
+  const holes = Array.from(
+    document.querySelectorAll(
+      '.adminPinHole:checked'
+    )
+  ).map(input => Number(input.value));
+
+  if (nearestEnabled && !holes.length) {
+    showMessage(
+      'adminCompetitionMessage',
+      'Select at least one par-3 hole.',
+      'bad'
+    );
+    return;
+  }
+
+  try {
+    await apiPost({
+      action: 'saveCompetitionSetup',
+      pin: adminPinValue,
+      eventId: adminEventId,
+      nearest_enabled: nearestEnabled,
+      nearest_holes: nearestEnabled ? holes : [],
+      blind_enabled: document.getElementById(
+        'adminBlindEnabled'
+      ).checked,
+      team234_enabled: document.getElementById(
+        'admin234Enabled'
+      ).checked
+    });
+
+    showMessage(
+      'adminCompetitionMessage',
+      'Competition setup saved.',
+      'good'
+    );
+
+  } catch (err) {
+    showMessage(
+      'adminCompetitionMessage',
+      err.message,
+      'bad'
+    );
+  }
+}
+</script>
+
+
+<script>
+/* v3.5 - Rolling Nearest the Pin scoring */
+
+(function () {
+  const originalRenderScoring = renderScoring;
+  let pinRenderVersion = 0;
+
+  renderScoring = function () {
+    originalRenderScoring();
+    showLivePinControl();
+  };
+
+  async function showLivePinControl() {
+    const version = ++pinRenderVersion;
+
+    if (!currentEvent || !selectedGroup.length) {
+      return;
+    }
+
+    const eventId = currentEvent.event_id;
+    const hole = Number(holeOrder[holeIndex]);
+    const groupNo = Number(selectedGroupNumber);
+    const container = document.getElementById(
+      'scorePlayers'
+    );
+
+    if (!container) return;
+
+    const panel = document.createElement('div');
+    panel.id = 'livePinPanel';
+    panel.className = 'card';
+    panel.innerHTML =
+      '<p>Checking Nearest the Pin…</p>';
+
+    container.appendChild(panel);
+
+    try {
+      const response = await apiGet('competitions', {
+        eventId: eventId
+      });
+
+      if (
+        version !== pinRenderVersion ||
+        Number(holeOrder[holeIndex]) !== hole ||
+        Number(selectedGroupNumber) !== groupNo ||
+        !document.getElementById('livePinPanel')
+      ) {
+        return;
+      }
+
+      const config = response.config || {};
+      const holes = config.nearest_holes || [];
+
+      if (
+        !config.nearest_enabled ||
+        !holes.map(Number).includes(hole)
+      ) {
+        panel.remove();
+        return;
+      }
+
+      const leaderId = String(
+        (response.nearest_pins || {})[hole] || ''
+      );
+panel.dataset.expectedLeader = leaderId;
+      const leader = allGroups.find(p =>
+        String(p.player_id) === leaderId
+      );
+
+      const leaderName = leader
+        ? leader.player_name
+        : leaderId === 'none'
+          ? 'No winner yet'
+          : leaderId || 'No leader yet';
+
+      const options = selectedGroup.map(p => `
+        <option value="${escapeHtml(String(p.player_id))}">
+          ${escapeHtml(p.player_name)}
+        </option>
+      `).join('');
+
+      panel.innerHTML = `
+        <div class="sub-title">
+          🎯 Nearest the Pin · Hole ${hole}
+        </div>
+
+        <p class="small-label">
+          Current leader
+        </p>
+
+        <p><strong>${escapeHtml(leaderName)}</strong></p>
+
+        <p class="small-label">
+          Only select a new leader if someone
+          in your group is closer.
+        </p>
+
+        <div class="field">
+          <label>New leader</label>
+          <select id="livePinPlayer">
+            <option value="">Select player</option>
+            ${options}
+          </select>
+        </div>
+
+        <button
+          class="secondary-button"
+          id="keepPinButton"
+          onclick="submitLivePin('keep')"
+        >
+          Keep current leader
+        </button>
+
+        <button
+          class="primary-button"
+          id="challengePinButton"
+          onclick="submitLivePin('challenge')"
+        >
+          Record new leader
+        </button>
+
+        <div
+          id="livePinMessage"
+          class="message hidden"
+        ></div>
+      `;
+
+    } catch (err) {
+      panel.innerHTML =
+        '<p>Pin competition unavailable: ' +
+        escapeHtml(err.message) + '</p>';
+    }
+  }
+
+  window.submitLivePin = async function (pinAction) {
+    const hole = Number(holeOrder[holeIndex]);
+    const groupNo = Number(selectedGroupNumber);
+    const select = document.getElementById(
+      'livePinPlayer'
+    );
+
+    const playerId = select ? select.value : '';
+
+    if (pinAction === 'challenge' && !playerId) {
+      showMessage(
+        'livePinMessage',
+        'Select the player who is closer.',
+        'bad'
+      );
+      return;
+    }
+
+    const keepButton = document.getElementById(
+      'keepPinButton'
+    );
+
+    const challengeButton = document.getElementById(
+      'challengePinButton'
+    );
+
+    keepButton.disabled = true;
+    challengeButton.disabled = true;
+
+    try {
+      await apiPost({
+  action: 'updatePinLeader',
+  eventId: currentEvent.event_id,
+  hole: hole,
+  groupNo: groupNo,
+  pinAction: pinAction,
+  playerId: pinAction === 'challenge'
+    ? playerId
+    : '',
+  expectedLeader:
+    document.getElementById('livePinPanel')
+      .dataset.expectedLeader || ''
+});
+
+      await showLivePinControl();
+
+      showMessage(
+        'livePinMessage',
+        pinAction === 'challenge'
+          ? 'New pin leader recorded.'
+          : 'Current leader retained.',
+        'good'
+      );
+
+    } catch (err) {
+      showMessage(
+        'livePinMessage',
+        err.message,
+        'bad'
+      );
+
+      keepButton.disabled = false;
+      challengeButton.disabled = false;
+    }
+  };
+})();
+</script>
+
   
 </body>
 
