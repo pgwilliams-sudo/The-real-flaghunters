@@ -4534,7 +4534,530 @@ function cssEscape(value) {
   }
 
 
-  return String(value)
+ 
+<script>
+/* Saturday Competitions UI - v3.4 */
+(function () {
+  let event = null;
+  let groups = [];
+  let scores = [];
+  let courseRows = [];
+  let competitionData = null;
+  let competitionPin = '';
+
+  function el(id) {
+    return document.getElementById(id);
+  }
+
+  function escapeCompetitionText(value) {
+    return String(value == null ? '' : value)
+      .replace(/[&<>"']/g, function (c) {
+        return {
+          '&': '&amp;',
+          '<': '&lt;',
+          '>': '&gt;',
+          '"': '&quot;',
+          "'": '&#39;'
+        }[c];
+      });
+  }
+
+  function message(text, bad) {
+    const box = el('competitionMessage');
+    box.textContent = text;
+    box.className = 'message ' +
+      (bad ? 'bad' : 'good');
+  }
+
+  function members() {
+    return groups;
+  }
+
+  function parThreeHoles() {
+    return courseRows
+      .filter(h =>
+        String(h.course) === String(event.course) &&
+        String(h.tee) === String(event.tee) &&
+        Number(h.par) === 3
+      )
+      .map(h => Number(h.hole))
+      .sort((a, b) => a - b);
+  }
+
+  function playerName(id) {
+    const player = members().find(p =>
+      String(p.player_id) === String(id)
+    );
+
+    return player ? player.player_name : id;
+  }
+
+  function playerPoints(id) {
+    return scores
+      .filter(s =>
+        String(s.player_id) === String(id)
+      )
+      .reduce((sum, s) =>
+        sum + Number(s.stableford || 0), 0
+      );
+  }
+
+  function holePoints(id, hole) {
+    const score = scores.find(s =>
+      String(s.player_id) === String(id) &&
+      Number(s.hole) === Number(hole)
+    );
+
+    return score
+      ? Number(score.stableford)
+      : null;
+  }
+
+  function playerFinished(id) {
+    const holes = new Set(
+      scores
+        .filter(s =>
+          String(s.player_id) === String(id)
+        )
+        .map(s => Number(s.hole))
+    );
+
+    return holes.size === 18;
+  }
+
+  async function load() {
+    const current = await apiGet('currentEvent');
+    event = current.event;
+
+    if (!event) {
+      throw new Error('No round available');
+    }
+
+    const id = event.event_id;
+
+    const results = await Promise.all([
+      apiGet('competitions', { eventId: id }),
+      apiGet('groups', { eventId: id }),
+      apiGet('scores', { eventId: id }),
+      apiGet('course')
+    ]);
+
+    competitionData = results[0];
+    groups = results[1].groups || [];
+    scores = results[2].scores || [];
+    courseRows = results[3].course || [];
+  }
+
+  function renderNearestPin() {
+    const config = competitionData.config || {};
+    const chosen = config.nearest_holes || [];
+    const winners = competitionData.nearest_pins || {};
+
+    let html = `
+      <div class="card">
+        <div class="sub-title">🎯 Nearest the Pin</div>
+        <p class="small-label">
+          Select the par-3 holes to include.
+          This competition is optional.
+        </p>
+        <label class="toggle-row">
+          <input
+            id="competitionPinEnabled"
+            type="checkbox"
+            ${config.nearest_enabled ? 'checked' : ''}
+          >
+          Enable Nearest the Pin
+        </label>
+        <p><strong>Selected holes</strong></p>
+    `;
+
+    parThreeHoles().forEach(hole => {
+      html += `
+        <label style="display:inline-block;
+                      margin:8px 16px 8px 0">
+          <input
+            type="checkbox"
+            class="competitionHole"
+            value="${hole}"
+            ${chosen.includes(hole) ? 'checked' : ''}
+          >
+          Hole ${hole}
+        </label>
+      `;
+    });
+
+    html += `
+        <button
+          class="secondary-button"
+          onclick="saveCompetitionSetupUI()"
+        >
+          Save competition setup
+        </button>
+    `;
+
+    if (config.nearest_enabled && chosen.length) {
+      html += `
+        <hr>
+        <p><strong>Record winners</strong></p>
+      `;
+
+      chosen.forEach(hole => {
+        html += `
+          <div class="field">
+            <label>Hole ${hole}</label>
+            <select
+              class="competitionWinner"
+              data-hole="${hole}"
+            >
+              <option value="">
+                Not recorded yet
+              </option>
+              <option value="none"
+                ${winners[hole] === 'none'
+                  ? 'selected' : ''}>
+                No winner
+              </option>
+        `;
+
+        members().forEach(p => {
+          const id = String(p.player_id);
+
+          html += `
+            <option value="${escapeCompetitionText(id)}"
+              ${String(winners[hole]) === id
+                ? 'selected' : ''}>
+              ${escapeCompetitionText(p.player_name)}
+            </option>
+          `;
+        });
+
+        html += '</select></div>';
+      });
+
+      html += `
+        <button
+          class="secondary-button"
+          onclick="saveCompetitionPinsUI()"
+        >
+          Save pin winners
+        </button>
+      `;
+    }
+
+    return html + '</div>';
+  }
+
+  function renderBlindPairs() {
+    const players = members();
+    const pairs = competitionData.blind_pairs || [];
+
+    const complete =
+      players.length > 0 &&
+      players.every(p =>
+        playerFinished(p.player_id)
+      );
+
+    let html = `
+      <div class="card">
+        <div class="sub-title">🤝 Blind Pairs</div>
+        <p class="small-label">
+          Draw after everyone finishes.
+          An even number of players is required.
+        </p>
+    `;
+
+    if (pairs.length) {
+      const ranked = pairs.map(pair => ({
+        pair: pair,
+        points:
+          playerPoints(pair[0]) +
+          playerPoints(pair[1])
+      })).sort((a, b) => b.points - a.points);
+
+      ranked.forEach((result, index) => {
+        html += `
+          <p>
+            <strong>
+              ${index + 1}.
+              ${escapeCompetitionText(
+                playerName(result.pair[0])
+              )}
+              +
+              ${escapeCompetitionText(
+                playerName(result.pair[1])
+              )}
+            </strong>
+            <span>${result.points} pts</span>
+          </p>
+        `;
+      });
+    } else {
+      const even =
+        players.length >= 2 &&
+        players.length % 2 === 0;
+
+      html += `
+        <p>
+          ${!even
+            ? 'An even number of players is required.'
+            : !complete
+              ? 'Waiting for all players to finish.'
+              : 'All players finished. Ready to draw.'}
+        </p>
+        <button
+          class="primary-button"
+          onclick="drawCompetitionPairsUI()"
+          ${!even || !complete ? 'disabled' : ''}
+        >
+          Draw Blind Pairs
+        </button>
+      `;
+    }
+
+    return html + '</div>';
+  }
+
+  function render234() {
+    const numbers = [
+      ...new Set(
+        members().map(p => Number(p.group_no))
+      )
+    ].sort((a, b) => a - b);
+
+    const teams = [];
+
+    numbers.forEach(number => {
+      const team = members().filter(p =>
+        Number(p.group_no) === number
+      );
+
+      if (team.length !== 4) return;
+
+      let total = 0;
+      let completedHoles = 0;
+
+      for (let hole = 1; hole <= 18; hole++) {
+        const points = team.map(p =>
+          holePoints(p.player_id, hole)
+        );
+
+        if (points.some(p => p === null)) {
+          continue;
+        }
+
+        const counting = 2 + ((hole - 1) % 3);
+
+        points.sort((a, b) => b - a);
+
+        total += points
+          .slice(0, counting)
+          .reduce((sum, p) => sum + p, 0);
+
+        completedHoles++;
+      }
+
+      teams.push({
+        number,
+        total,
+        completedHoles
+      });
+    });
+
+    teams.sort((a, b) => b.total - a.total);
+
+    let html = `
+      <div class="card">
+        <div class="sub-title">🏆 2/3/4 Team Game</div>
+        <p class="small-label">
+          Four-player groups only.
+          Best 2, best 3, all 4, then repeat.
+          Incomplete holes do not count yet.
+        </p>
+    `;
+
+    if (!teams.length) {
+      html += '<p>No four-player groups.</p>';
+    }
+
+    teams.forEach((team, index) => {
+      html += `
+        <p>
+          <strong>
+            ${index + 1}. Group ${team.number}
+          </strong>
+          ${team.total} pts
+          <span class="small-label">
+            (${team.completedHoles}/18 holes)
+          </span>
+        </p>
+      `;
+    });
+
+    return html + '</div>';
+  }
+
+  function render() {
+    el('competitionContent').innerHTML =
+      renderNearestPin() +
+      renderBlindPairs() +
+      render234();
+  }
+
+  async function open() {
+    showScreen('competitionScreen');
+
+    el('competitionContent').textContent =
+      'Loading competitions…';
+
+    el('competitionMessage').className =
+      'message hidden';
+
+    try {
+      await load();
+      render();
+    } catch (err) {
+      el('competitionContent').textContent =
+        err.message;
+    }
+  }
+
+  function organizerPin() {
+    if (competitionPin) return competitionPin;
+
+    const entered = prompt('Enter organizer PIN');
+
+    if (entered === null) {
+      throw new Error('Cancelled');
+    }
+
+    competitionPin = entered;
+    return entered;
+  }
+
+  async function post(action, details) {
+    try {
+      const pin = organizerPin();
+
+      await apiPost({
+        action,
+        eventId: event.event_id,
+        pin,
+        ...details
+      });
+
+      await load();
+      render();
+
+      message('Saved successfully.', false);
+    } catch (err) {
+      if (/PIN/i.test(err.message)) {
+        competitionPin = '';
+      }
+
+      message(err.message, true);
+    }
+  }
+
+  window.openCompetitions = open;
+
+  window.saveCompetitionSetupUI = function () {
+    const holes = [
+      ...document.querySelectorAll(
+        '.competitionHole:checked'
+      )
+    ].map(input => Number(input.value));
+
+    return post('saveCompetitionSetup', {
+      nearest_enabled:
+        el('competitionPinEnabled').checked,
+      nearest_holes: holes
+    });
+  };
+
+  window.saveCompetitionPinsUI = function () {
+    const winners = [
+      ...document.querySelectorAll(
+        '.competitionWinner'
+      )
+    ].map(select => ({
+      hole: Number(select.dataset.hole),
+      player_id: select.value
+    }));
+
+    return post('saveNearestPins', {
+      winners
+    });
+  };
+
+  window.drawCompetitionPairsUI = function () {
+    if (!confirm(
+      'Draw and permanently save the blind pairs?'
+    )) return;
+
+    return post('drawBlindPairs', {});
+  };
+
+  document.addEventListener(
+    'DOMContentLoaded',
+    function () {
+      const home = el('homeScreen');
+
+      const button = document.createElement('button');
+
+      button.className = 'menu-button';
+      button.innerHTML = `
+        <strong>🎯 Saturday Competitions</strong>
+        <span>
+          Nearest the Pin, Blind Pairs and 2/3/4
+        </span>
+      `;
+
+      button.onclick = open;
+
+      home.insertBefore(
+        button,
+        el('homeMessage')
+      );
+
+      const screen = document.createElement('main');
+
+      screen.id = 'competitionScreen';
+      screen.className = 'screen';
+
+      screen.innerHTML = `
+        <button
+          class="back"
+          onclick="showScreen('homeScreen')"
+        >
+          ← Home
+        </button>
+
+        <div class="section-title">
+          Saturday Competitions
+        </div>
+
+        <div
+          id="competitionMessage"
+          class="message hidden"
+        ></div>
+
+        <div id="competitionContent"></div>
+
+        <button
+          class="secondary-button"
+          onclick="openCompetitions()"
+        >
+          Refresh results
+        </button>
+      `;
+
+      document.querySelector('.app')
+        .appendChild(screen);
+    }
+  );
+})();
+</script>
+ return String(value)
     .replace(
       /["\\]/g,
       '\\$&'
