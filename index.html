@@ -244,6 +244,23 @@
       border-bottom: 0;
     }
 
+    
+#handicapPlayers .player-select-row {
+  grid-template-columns: minmax(0, 1fr) 90px 65px;
+}
+
+#handicapPlayers .player-select-row input {
+  min-width: 0;
+  min-height: 40px;
+  padding: 7px;
+}
+
+.player-select-row .player-handicap {
+  min-height: 40px;
+  padding: 7px;
+}
+
+
     .player-select-row input[type="checkbox"] {
       width: 22px;
       height: 22px;
@@ -677,6 +694,48 @@
   </main>
 
 
+<!-- WHS HANDICAP CONFIRMATION -->
+
+<main id="handicapScreen" class="screen">
+
+  <button
+    class="back"
+    onclick="showScreen('groupScreen')"
+  >
+    ← Groups
+  </button>
+
+  <div class="section-title">
+    Confirm today's handicaps
+  </div>
+
+  <div class="card">
+
+    <p id="handicapIntro">
+      The group scorer must confirm each
+      player's WHS Handicap Index before
+      scoring begins.
+    </p>
+
+    <div id="handicapPlayers"></div>
+
+    <div
+      id="handicapMessage"
+      class="message hidden"
+    ></div>
+
+    <button
+      id="confirmHandicapsButton"
+      class="primary-button"
+      onclick="confirmGroupHandicaps()"
+    >
+      Confirm handicaps &amp; start scoring
+    </button>
+
+  </div>
+
+</main>
+
 
   <!-- SCORING -->
 
@@ -993,7 +1052,7 @@
 
       <p class="small-label">
         Tick the players and enter today's
-        playing handicap.
+WHS Handicap Index. Use + for plus handicaps.
       </p>
 
       <div id="adminPlayers"></div>
@@ -1635,11 +1694,25 @@ async function selectGroup(
     }
 
 
-    renderScoring();
+    
+const groupHasScores = selectedGroup.some(player =>
+  allScores.some(score =>
+    String(score.player_id) === String(player.player_id)
+  )
+);
 
-    showScreen(
-      'scoreScreen'
-    );
+const confirmed = selectedGroup.every(player =>
+  isConfirmed(player.handicap_confirmed)
+);
+
+if (!confirmed && !groupHasScores) {
+  renderHandicapConfirmation();
+  showScreen('handicapScreen');
+} else {
+  renderScoring();
+  showScreen('scoreScreen');
+}
+
 
   }
 
@@ -1653,6 +1726,201 @@ async function selectGroup(
 
 }
 
+
+function isConfirmed(value) {
+  return value === true ||
+    value === 1 ||
+    String(value).toLowerCase() === 'true';
+}
+
+function parseHandicapIndex(value) {
+  const raw = String(value ?? '').trim();
+
+  if (!/^[+-]?\d+(?:\.\d)?$/.test(raw)) {
+    throw new Error(
+      'Enter a valid Handicap Index, such as 12.4 or +2.4.'
+    );
+  }
+
+  const index = raw.startsWith('+')
+    ? -Number(raw.slice(1))
+    : Number(raw);
+
+  if (!Number.isFinite(index) ||
+      index < -9.9 || index > 54) {
+    throw new Error(
+      'Handicap Index must be between +9.9 and 54.0.'
+    );
+  }
+
+  return index;
+}
+
+function displayHandicap(value, decimals = 0) {
+  const n = Number(value);
+
+  if (!Number.isFinite(n)) return '';
+
+  return n < 0
+    ? '+' + Math.abs(n).toFixed(decimals)
+    : n.toFixed(decimals);
+}
+
+function getTeeData() {
+  const holes = course.filter(row =>
+    String(row.course) === String(currentEvent.course) &&
+    String(row.tee) === String(currentEvent.tee)
+  );
+
+  if (holes.length !== 18) {
+    throw new Error(
+      'Complete tee data is required to calculate handicaps.'
+    );
+  }
+
+  const slope = Number(holes[0].slope);
+  const rating = Number(holes[0].course_rating);
+  const par = holes.reduce(
+    (sum, row) => sum + Number(row.par), 0
+  );
+
+  if (!Number.isFinite(slope) ||
+      !Number.isFinite(rating) ||
+      !Number.isFinite(par) ||
+      slope <= 0) {
+    throw new Error('Invalid course rating or slope.');
+  }
+
+  return { slope, rating, par };
+}
+
+function courseHandicap(index) {
+  const { slope, rating, par } = getTeeData();
+
+  const raw = index * slope / 113 + rating - par;
+
+  return Math.sign(raw) *
+    Math.floor(Math.abs(raw) + 0.5);
+}
+
+function renderHandicapConfirmation() {
+  document.getElementById('handicapIntro').textContent =
+    'Group ' + selectedGroupNumber +
+    ': confirm each WHS Handicap Index. ' +
+    'Enter a plus golfer as +2.4. ' +
+    'Course Handicap uses 100% allowance.';
+
+  document.getElementById('handicapPlayers').innerHTML =
+    selectedGroup.map(player => {
+      const index = Number(player.handicap_index);
+
+      const value = Number.isFinite(index)
+        ? displayHandicap(index, 1)
+        : '';
+
+      return `
+        <div class="player-select-row">
+          <label>
+            <strong>${escapeHtml(player.player_name)}</strong>
+            <div class="small-label">
+              WHS Handicap Index
+            </div>
+          </label>
+
+          <input
+            class="confirm-handicap-input"
+            type="text"
+            inputmode="decimal"
+            data-player-id="${escapeAttribute(player.player_id)}"
+            value="${escapeAttribute(value)}"
+            style="max-width:95px"
+            oninput="updateHandicapPreview()"
+          >
+
+          <span
+            class="small-label"
+            id="ch-${escapeAttribute(player.player_id)}"
+          ></span>
+        </div>
+      `;
+    }).join('');
+
+  hideMessage('handicapMessage');
+  updateHandicapPreview();
+}
+
+function updateHandicapPreview() {
+  document.querySelectorAll('.confirm-handicap-input')
+    .forEach(input => {
+      const label = document.getElementById(
+        'ch-' + input.dataset.playerId
+      );
+
+      try {
+        const index = parseHandicapIndex(input.value);
+        label.textContent =
+          'CH ' + displayHandicap(courseHandicap(index));
+      } catch (_) {
+        label.textContent = 'Check index';
+      }
+    });
+}
+
+async function confirmGroupHandicaps() {
+  const button = document.getElementById(
+    'confirmHandicapsButton'
+  );
+
+  try {
+    const handicaps = Array.from(
+      document.querySelectorAll('.confirm-handicap-input')
+    ).map(input => ({
+      player_id: input.dataset.playerId,
+      handicap_index: parseHandicapIndex(input.value)
+    }));
+
+    button.disabled = true;
+    button.textContent = 'Confirming…';
+
+    const result = await apiPost({
+      action: 'confirmGroupHandicaps',
+      eventId: currentEvent.event_id,
+      groupNo: selectedGroupNumber,
+      handicaps
+    });
+
+    if (Array.isArray(result.groups)) {
+      allGroups = result.groups;
+    } else {
+      handicaps.forEach(item => {
+        const player = selectedGroup.find(p =>
+          String(p.player_id) === String(item.player_id)
+        );
+
+        if (player) {
+          player.handicap_index = item.handicap_index;
+          player.playing_handicap =
+            courseHandicap(item.handicap_index);
+          player.handicap_confirmed = true;
+        }
+      });
+    }
+
+    selectedGroup = allGroups.filter(p =>
+      Number(p.group_no) === selectedGroupNumber
+    );
+
+    renderScoring();
+    showScreen('scoreScreen');
+
+  } catch (err) {
+    showMessage('handicapMessage', err.message, 'bad');
+  } finally {
+    button.disabled = false;
+    button.textContent =
+      'Confirm handicaps & start scoring';
+  }
+}
 
 
 function buildHoleOrder(
@@ -1949,7 +2217,7 @@ function renderScoring() {
               class="small-label"
             >
               Playing handicap
-              ${player.playing_handicap}
+              ${displayHandicap(player.playing_handicap)}
             </div>
 
           </div>
@@ -1959,11 +2227,14 @@ function renderScoring() {
             class="stroke-info"
           >
 
-            ${
-              strokes > 0
-                ? `${strokes} stroke${strokes > 1 ? 's' : ''}`
-                : 'No stroke'
-            }
+            
+${
+  strokes > 0
+    ? `${strokes} stroke${strokes > 1 ? 's' : ''}`
+    : strokes < 0
+      ? `Gives ${Math.abs(strokes)} stroke${strokes < -1 ? 's' : ''}`
+      : 'No stroke'
+}
 
           </div>
 
@@ -2345,9 +2616,10 @@ function updateScoreDisplay(
     }`;
 
 
-  if (
-    strokes > 0
-  ) {
+  
+if (strokes !== 0) {
+  text += ` · Net ${net}`;
+}
 
     text +=
       ` · Net ${net}`;
@@ -2362,44 +2634,23 @@ function updateScoreDisplay(
 
 
 
-function calculateHoleStrokes(
-  playingHandicap,
-  strokeIndex
-) {
 
-  const handicap =
-    Math.max(
-      0,
-      Math.round(
-        Number(
-          playingHandicap
-        ) || 0
-      )
-    );
+function calculateHoleStrokes(playingHandicap, strokeIndex) {
+  const handicap = Number(playingHandicap);
+  const si = Number(strokeIndex);
 
+  if (
+    !Number.isInteger(handicap) ||
+    !Number.isInteger(si) ||
+    si < 1 ||
+    si > 18
+  ) {
+    throw new Error('Invalid handicap or stroke index.');
+  }
 
-  const base =
-    Math.floor(
-      handicap / 18
-    );
-
-
-  const remainder =
-    handicap % 18;
-
-
-  return (
-    base +
-    (
-      Number(
-        strokeIndex
-      ) <= remainder
-        ? 1
-        : 0
-    )
-  );
-
+  return Math.floor((handicap + 18 - si) / 18);
 }
+
 
 
 
@@ -3205,7 +3456,7 @@ function renderPlayerSetup() {
         player.handicap_index ===
           undefined
           ? ''
-          : player.handicap_index;
+          : displayHandicap(player.handicap_index, 1);
 
 
       div.innerHTML = `
@@ -3232,10 +3483,9 @@ function renderPlayerSetup() {
 
 
         <input
-          type="number"
-          inputmode="decimal"
-          step="1"
-          class="player-handicap"
+          type="text"
+inputmode="decimal"
+class="player-handicap"
           data-player-id="${escapeAttribute(
             player.player_id
           )}"
@@ -3267,8 +3517,14 @@ function renderPlayerSetup() {
 
 function randomiseGroups() {
 
-  const selected =
-    getSelectedAdminPlayers();
+  let selected;
+
+try {
+  selected = getSelectedAdminPlayers();
+} catch (err) {
+  alert(err.message);
+  return;
+}
 
 
   if (
@@ -3368,6 +3624,9 @@ function randomiseGroups() {
             playing_handicap:
               player.playing_handicap,
 
+            handicap_index:
+  player.handicap_index,
+
             group_no:
               index + 1,
 
@@ -3410,85 +3669,34 @@ function randomiseGroups() {
 
 
 
+
 function getSelectedAdminPlayers() {
+  return Array.from(
+    document.querySelectorAll('.player-check:checked')
+  ).map(checkbox => {
+    const id = checkbox.dataset.playerId;
 
-  const selected = [];
-
-
-  document
-    .querySelectorAll(
-      '.player-check:checked'
-    )
-    .forEach(
-      checkbox => {
-
-        const id =
-          checkbox.dataset
-            .playerId;
-
-
-        const player =
-          allPlayers.find(
-            p =>
-              String(
-                p.player_id
-              ) ===
-              String(id)
-          );
-
-
-        const handicapInput =
-  Array.from(
-    document.querySelectorAll(
-      '.player-handicap'
-    )
-  ).find(
-    input =>
-      String(
-        input.dataset.playerId
-      ) ===
-      String(id)
-  );
-
-
-        const handicap =
-          Number(
-            handicapInput
-              ?.value
-          );
-
-
-        if (
-          !Number.isFinite(
-            handicap
-          )
-        ) {
-
-          return;
-
-        }
-
-
-        selected.push({
-
-          player_id:
-            player.player_id,
-
-          name:
-            player.name,
-
-          playing_handicap:
-            handicap
-
-        });
-
-      }
+    const player = allPlayers.find(p =>
+      String(p.player_id) === String(id)
     );
 
+    const input = Array.from(
+      document.querySelectorAll('.player-handicap')
+    ).find(el =>
+      String(el.dataset.playerId) === String(id)
+    );
 
-  return selected;
+    const handicap_index = parseHandicapIndex(input?.value);
 
+    return {
+      player_id: player.player_id,
+      name: player.name,
+      handicap_index,
+      playing_handicap: courseHandicap(handicap_index)
+    };
+  });
 }
+
 
 
 
@@ -4066,7 +4274,9 @@ async function saveGroupSetup() {
               Number(
                 row.playing_handicap
               ),
-
+handicap_index:
+  Number(row.handicap_index),
+            
             scorer:
               Boolean(
                 row.scorer
@@ -4104,7 +4314,11 @@ async function saveGroupSetup() {
             Number(
               row.playing_handicap
             ),
+handicap_index:
+  Number(row.handicap_index),
 
+handicap_confirmed: false,
+          
           scorer:
             Boolean(
               row.scorer
