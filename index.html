@@ -5434,9 +5434,19 @@ async function saveAdminCompetitions() {
   let submitting = false;
 
   renderScoring = function () {
-    originalRenderScoring();
-    showLivePinControl();
-  };
+  originalRenderScoring();
+
+  const container = document.getElementById('scorePlayers');
+
+  if (container) {
+    const test = document.createElement('div');
+    test.className = 'message info';
+    test.textContent = '🎯 Nearest the Pin script is running';
+    container.appendChild(test);
+  }
+
+  showLivePinControl();
+};
 
   async function showLivePinControl(successMessage) {
     const version = ++pinRenderVersion;
