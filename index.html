@@ -4535,7 +4535,24 @@ function cssEscape(value) {
 
 
  
-<script>
+
+ return String(value)
+    .replace(
+      /["\\]/g,
+      '\\$&'
+    );
+
+}
+
+
+
+initialise();
+
+</script>
+
+
+
+  <script>
 /* Saturday Competitions UI - v3.4 */
 (function () {
   let event = null;
@@ -5057,21 +5074,7 @@ function cssEscape(value) {
   );
 })();
 </script>
- return String(value)
-    .replace(
-      /["\\]/g,
-      '\\$&'
-    );
-
-}
-
-
-
-initialise();
-
-</script>
-
-
+  
 </body>
 
 </html>
