@@ -2156,144 +2156,144 @@ function getCurrentCourseHole() {
 
 
 
-function renderScoring() {
-
-  hideMessage(
-    'scoreMessage'
-  );
-
-
-  const hole =
-    holeOrder[
-      holeIndex
-    ];
-
-
-  const courseHole =
-    getCurrentCourseHole();
-
-
-  if (!courseHole) {
-
-    showMessage(
-      'scoreMessage',
-      'Course data for this hole could not be found.',
-      'bad'
+  function renderScoring() {
+  
+    hideMessage(
+      'scoreMessage'
     );
-
-    return;
-
-  }
-
-
-  const scorer =
-    selectedGroup.find(
-      row => row.scorer
-    );
-
-
-  document
-    .getElementById(
-      'scorerBanner'
-    )
-    .innerHTML = `
-
-      <strong>
-        Group ${selectedGroupNumber}
-      </strong>
-      · Scorer:
-      <strong>
-        ${escapeHtml(
-          scorer
-            ?.player_name ||
-          'Not set'
-        )}
-      </strong>
-
-    `;
-
-
-  const progress =
-    (
+  
+  
+    const hole =
+      holeOrder[
+        holeIndex
+      ];
+  
+  
+    const courseHole =
+      getCurrentCourseHole();
+  
+  
+    if (!courseHole) {
+  
+      showMessage(
+        'scoreMessage',
+        'Course data for this hole could not be found.',
+        'bad'
+      );
+  
+      return;
+  
+    }
+  
+  
+    const scorer =
+      selectedGroup.find(
+        row => row.scorer
+      );
+  
+  
+    document
+      .getElementById(
+        'scorerBanner'
+      )
+      .innerHTML = `
+  
+        <strong>
+          Group ${selectedGroupNumber}
+        </strong>
+        · Scorer:
+        <strong>
+          ${escapeHtml(
+            scorer
+              ?.player_name ||
+            'Not set'
+          )}
+        </strong>
+  
+      `;
+  
+  
+    const progress =
       (
-        holeIndex + 1
-      ) / 18
-    ) * 100;
-
-
-  document
-    .getElementById(
-      'holeHeader'
-    )
-    .innerHTML = `
-
-      <div class="hole-number">
-        Hole ${hole}
-      </div>
-
-      <div class="hole-meta">
-        Par ${courseHole.par}
-        · SI ${courseHole.stroke_index}
-        · ${courseHole.yards} yards
-      </div>
-
-      <div class="progress">
-
-        <div
-          class="progress-inner"
-          style="
-            width:${progress}%
-          "
-        ></div>
-
-      </div>
-
-      <div class="small-label"
-        style="margin-top:7px;">
-        Hole ${holeIndex + 1}
-        of 18 for this group
-      </div>
-
-    `;
-
-
-  holeScores = {};
-
-
-  const container =
-    document.getElementById(
-      'scorePlayers'
-    );
-
-
-  container.innerHTML = '';
-
-
-  selectedGroup.forEach(
-    player => {
-
-      const saved =
-        allScores.find(
-          score =>
-            String(
-              score.player_id
-            ) ===
-            String(
-              player.player_id
-            ) &&
-            Number(
-              score.hole
-            ) === hole
-        );
-
-
-      const startingScore =
-        saved
-          ? Number(
-              saved.gross
-            )
-          : null;
-
+        (
+          holeIndex + 1
+        ) / 18
+      ) * 100;
+  
+  
+    document
+      .getElementById(
+        'holeHeader'
+      )
+      .innerHTML = `
+  
+        <div class="hole-number">
+          Hole ${hole}
+        </div>
+  
+        <div class="hole-meta">
+          Par ${courseHole.par}
+          · SI ${courseHole.stroke_index}
+          · ${courseHole.yards} yards
+        </div>
+  
+        <div class="progress">
+  
+          <div
+            class="progress-inner"
+            style="
+              width:${progress}%
+            "
+          ></div>
+  
+        </div>
+  
+        <div class="small-label"
+          style="margin-top:7px;">
+          Hole ${holeIndex + 1}
+          of 18 for this group
+        </div>
+  
+      `;
+  
+  
+    holeScores = {};
+  
+  
+    const container =
+      document.getElementById(
+        'scorePlayers'
+      );
+  
+  
+    container.innerHTML = '';
+  
+  
+    selectedGroup.forEach(
+      player => {
+  
+        const saved =
+          allScores.find(
+            score =>
+              String(
+                score.player_id
+              ) ===
+              String(
+                player.player_id
+              ) &&
+              Number(
+                score.hole
+              ) === hole
+          );
+  
+  
+        const startingScore =
+          saved
+            ? Number(
+                saved.gross
+              )
+            : null;
+  
 
       holeScores[
         player.player_id
@@ -5487,12 +5487,20 @@ async function saveAdminCompetitions() {
         .map(Number);
 
       if (
-        !config.nearest_enabled ||
-        !holes.includes(hole)
-      ) {
-        panel.remove();
-        return;
-      }
+  !config.nearest_enabled ||
+  !holes.includes(hole)
+) {
+  panel.innerHTML = `
+    <div class="message info">
+      Nearest the Pin diagnostic<br>
+      Event: ${escapeHtml(String(eventId))}<br>
+      Current hole: ${hole}<br>
+      Enabled: ${String(config.nearest_enabled)}<br>
+      Configured holes: ${holes.join(', ') || 'none'}
+    </div>
+  `;
+  return;
+}
 
       const leaderId = String(
         (response.nearest_pins || {})[hole] || ''
