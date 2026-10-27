@@ -2783,7 +2783,8 @@ async function saveAndNext() {
 
   const currentHole = Number(holeOrder[holeIndex]);
 
-  try {
+  if (Number(getCurrentCourseHole()?.par) === 3) {
+try {
     const competition = await apiGet('competitions', {
       eventId: currentEvent.event_id
     });
@@ -2828,7 +2829,7 @@ async function saveAndNext() {
     );
     return;
   }
-
+  }
 
   
   const hole =
