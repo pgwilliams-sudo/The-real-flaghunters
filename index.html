@@ -5407,11 +5407,7 @@ async function saveAdminCompetitions() {
       await loadAdminPinCorrection();
     }
 
-    showMessage(
-      'adminCompetitionMessage',
-      'Competition setup saved.',
-      'good'
-    );
+        showScreen('homeScreen');
 
   } catch (err) {
     showMessage(
@@ -5685,12 +5681,52 @@ async function saveAdminCompetitions() {
           ? 'New pin leader recorded successfully.'
           : 'Current pin leader confirmed.';
 
-      if (
+            if (
         currentEvent.event_id === eventId &&
         Number(holeOrder[holeIndex]) === hole &&
         Number(selectedGroupNumber) === groupNo
       ) {
-        await showLivePinControl(successMessage);
+        const newLeaderId = pinAction === 'challenge'
+          ? String(playerId)
+          : String(panel.dataset.expectedLeader || '');
+
+        panel.dataset.expectedLeader = newLeaderId;
+
+        const leader = allGroups.find(p =>
+          String(p.player_id) === newLeaderId
+        );
+
+        const leaderDisplay = panel.querySelector(
+          '.sub-title'
+        );
+
+        if (leaderDisplay) {
+          leaderDisplay.textContent =
+            '🎯 Nearest the Pin · Hole ' + hole;
+        }
+
+        const status = panel.querySelector('.message.info');
+        if (status) {
+          status.className = 'message good';
+          status.textContent =
+            '✓ Group ' + groupNo +
+            ' has recorded its decision for this hole.';
+        }
+
+        const leaderLabel = Array.from(
+          panel.querySelectorAll('.small-label')
+        ).find(el => el.textContent.trim() === 'Current leader');
+
+        if (leaderLabel && leaderLabel.nextElementSibling) {
+          leaderLabel.nextElementSibling.textContent =
+            leader ? leader.player_name : 'No leader yet';
+        }
+
+        showMessage(
+          'livePinMessage',
+          successMessage,
+          'good'
+        );
       }
 
     } catch (err) {
