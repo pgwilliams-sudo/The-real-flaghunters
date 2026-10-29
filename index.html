@@ -4923,9 +4923,14 @@ const complete =
     if (pairs.length) {
       const ranked = pairs.map(pair => ({
         pair: pair,
-        points:
-          playerPoints(pair[0]) +
-          playerPoints(pair[1])
+        points: Array.from({ length: 18 }, (_, i) => i + 1)
+  .reduce((total, hole) => {
+    const first = holePoints(pair[0], hole);
+    const second = holePoints(pair[1], hole);
+
+    return total + Math.max(first ?? 0, second ?? 0);
+  }, 0)
+        
       })).sort((a, b) => b.points - a.points);
 
       ranked.forEach((result, index) => {
