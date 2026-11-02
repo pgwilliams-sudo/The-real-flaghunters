@@ -1,4 +1,4 @@
-/** V2 Phase 1. No setup runs at load time. See docs/PHASE1.md. */
+/** V2 scoring backend. No setup runs at load time. See docs/PHASE1.md and docs/PHASE2.md. */
 const V2_SCHEMA = {
   RoundEventsV2: ['event_id','data'],
   RoundCourseHoles: ['snapshot_id','hole','data'],
@@ -255,12 +255,16 @@ function v2Save(data,actor) {
 }
 function doGet(e) {
   try {
-  // Legacy reads remain available. Future reveal filtering must cover all result routes.
-  const p=(e&&e.parameter)||{};
-  if(p.action==='roundCourse') { const meta=v2Meta(p.eventId);return jsonResponse({ok:true,course:meta?v2Course(meta):getCourse()}); }
-  if((p.action||'status')==='status') return jsonResponse({ok:true,app:'The Real Flag Hunters',version:'2-phase1',api_generation:'v2-phase1',message:'V2 test backend'});
-  return legacyDoGet(e);
-  } catch(err) { return jsonResponse({ok:false,error:err.message}); }
+    const p=(e&&e.parameter)||{},action=p.action||'status',eventId=String(p.eventId||'');
+    if(action==='status') return jsonResponse({ok:true,app:'The Real Flag Hunters',version:'2-phase2',api_generation:'v2-phase1',message:'V2 test backend'});
+    if(action==='scores') return jsonResponse({ok:true,scores:v2PublicScores(eventId)});
+    if(action==='leaderboard') return jsonResponse({ok:true,leaderboard:getLeaderboard(eventId),revealed:v2ResultsRevealed(eventId)});
+    if(action==='competitions') return jsonResponse({ok:true,...v2PublicCompetitions(eventId)});
+    if(action==='roundCourse') {const meta=v2Meta(eventId);return jsonResponse({ok:true,course:meta?v2Course(meta):getCourse()});}
+    // Explicit allowlist: no future legacy endpoint can bypass the reveal policy.
+    if(!['currentEvent','groups','players','course','season'].includes(action)) throw new Error('Unknown action');
+    return legacyDoGet(e);
+  } catch(err) {return jsonResponse({ok:false,error:err.message});}
 }
 function doPost(e) {
   try {
@@ -279,6 +283,9 @@ function doPost(e) {
     }
     if(action==='openGroup') return jsonResponse(v2OpenGroup(data));
     const actor=v2Auth(data.credential);
+    if(action==='revealResults') return jsonResponse(v2RevealResults(data,actor));
+    if(action==='adminCompetitionData') {v2Admin(actor);return jsonResponse({ok:true,...getCompetitionData(data.eventId)});}
+
     if(action==='issueGroupCredential') return jsonResponse(withScriptLock(()=>{
       v2Admin(actor); v2Writable(data.eventId);
       const group=getGroups(data.eventId).filter(p=>p.group_no===Number(data.groupNo));
@@ -302,8 +309,10 @@ function doPost(e) {
     }
     if(action==='roundBootstrap') {
       v2Scope(actor,data.eventId,[],data.groupNo);
-      const meta=v2Meta(data.eventId);
-      return jsonResponse({ok:true,meta,course:meta?v2Course(meta):getCourse(),groups:getGroups(data.eventId),scores:getScores(data.eventId)});
+      const meta=v2Meta(data.eventId),groups=getGroups(data.eventId);
+      const ownPlayers=new Set(groups.filter(p=>p.group_no===actor.group_no).map(p=>String(p.player_id)));
+      return jsonResponse({ok:true,meta,course:meta?v2Course(meta):getCourse(),groups,
+        scores:getScores(data.eventId).filter(s=>actor.role==='admin'||ownPlayers.has(String(s.player_id)))});
     }
     if(action==='saveHoleScores' || action==='saveScore') {
       if(action==='saveScore') data.scores=[{playerId:data.playerId,gross:data.gross,status:data.status,reason:data.reason,expectedRevision:data.expectedRevision}];
@@ -384,4 +393,64 @@ function v2ScoreV1(player,hole,gross) {
   if(!Number.isInteger(h)||!Number.isInteger(si)||si<1||si>18)throw new Error('Invalid snapshot handicap or stroke index');
   const strokes=Math.floor((h+18-si)/18),net=gross-strokes,points=Math.max(0,2+Number(hole.par)-net);
   return {net,stableford:points,strokes_received:strokes,blob:points===0,birdie:gross===Number(hole.par)-1,eagle:gross<=Number(hole.par)-2};
+}
+
+// Phase 2: only these projections may be returned by unauthenticated result routes.
+function v2ResultsRevealed(eventId) {
+  const meta=v2Meta(eventId);
+  return !meta || Boolean(meta.revealed_at);
+}
+function v2PublicScores(eventId) {
+  const revealed=v2ResultsRevealed(eventId);
+  return getScores(eventId).filter(s=>revealed||Number(s.hole)<=15);
+}
+function v2PublicCompetitions(eventId) {
+  const data=getCompetitionData(eventId);
+  if(v2ResultsRevealed(eventId)) return data;
+  const visible=object=>Object.fromEntries(Object.entries(object||{}).filter(([h])=>Number(h)<=15));
+  return {...data,config:{...data.config,nearest_holes:(data.config.nearest_holes||[]).filter(h=>Number(h)<=15)},
+    nearest_pins:visible(data.nearest_pins),pin_acknowledgements:visible(data.pin_acknowledgements),
+    blind_pairs:[],group_status:[],all_groups_finished:false,results_partial:true};
+}
+function v2Split(scores,first,last) {
+  const rows=scores.filter(s=>Number(s.hole)>=first&&Number(s.hole)<=last);
+  const pickup=rows.some(s=>s.score_status==='pickup');
+  return {gross:pickup?null:rows.reduce((n,s)=>n+Number(s.gross||0),0),gross_incomplete:pickup,
+    stableford:rows.reduce((n,s)=>n+Number(s.stableford||0),0),holes:rows.length,
+    expected_holes:last-first+1,partial:rows.length<last-first+1,through_hole:last};
+}
+function v2Leaderboard(eventId) {
+  if(!eventId)return [];
+  const revealed=v2ResultsRevealed(eventId),last=revealed?18:15,scores=v2PublicScores(eventId);
+  return getGroups(eventId).map(p=>{
+    const rows=scores.filter(s=>String(s.player_id)===String(p.player_id));
+    const front9=v2Split(rows,1,9),back9=v2Split(rows,10,last),total=v2Split(rows,1,last);
+    back9.partial=back9.partial||!revealed;total.partial=total.partial||!revealed;
+    const pickup=total.gross_incomplete;
+    return {player_id:p.player_id,name:p.player_name,playing_handicap:p.playing_handicap,
+      front9,back9,total,revealed,gross:total.gross,gross_incomplete:pickup,
+      net:pickup?null:rows.reduce((n,s)=>n+Number(s.net||0),0),net_incomplete:pickup,
+      stableford:total.stableford,holes:total.holes,
+      blobs:rows.filter(s=>isTrue(s.blob)).length,birdies:rows.filter(s=>isTrue(s.birdie)).length,eagles:rows.filter(s=>isTrue(s.eagle)).length};
+  }).sort((a,b)=>b.stableford-a.stableford||String(a.player_id).localeCompare(String(b.player_id)));
+}
+function v2RevealResults(data,actor) {
+  return withScriptLock(()=>{
+    v2Admin(actor);
+    const eventId=String(data.eventId||''),meta=v2Meta(eventId);
+    if(!meta) throw new Error('A V2 round is required');
+    if(meta.revealed_at) return {ok:true,revealed:true,leaderboard:getLeaderboard(eventId)};
+    v2Writable(eventId);
+    v2Recover(eventId);
+    const groups=getGroups(eventId),scores=getScores(eventId);
+    if(!groups.length||!allGroupsFinished(eventId)||groups.some(p=>
+      !Array.from({length:18},(_,i)=>i+1).every(h=>scores.some(s=>String(s.player_id)===String(p.player_id)&&Number(s.hole)===h))))
+      throw new Error('Every group must finish all 18 holes before reveal');
+    const competition=competitionRecord(eventId);
+    if(competition.blindEnabled&&!competition.pairs.length) throw new Error('Draw Blind Pairs before reveal');
+    meta.revealed_at=v2Now();meta.locked=true;
+    v2Put('RoundEventsV2',eventId,[eventId,JSON.stringify(meta)]);
+    SpreadsheetApp.flush();
+    return {ok:true,revealed:true,leaderboard:getLeaderboard(eventId)};
+  });
 }

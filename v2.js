@@ -27,6 +27,7 @@
   }
   apiGet=async function(action,params) {
     if(!API_URL) throw new Error('Connect a separate V2 test backend first.');
+    if(action==='competitions'&&state.admin) return {...await apiPost({action:'adminCompetitionData',eventId:params?.eventId}),admin_view:true};
     if(action==='course'&&currentEvent?.event_id)return rawGet('roundCourse',{eventId:currentEvent.event_id});
     return rawGet(action,params);
   };
@@ -61,6 +62,20 @@
       state.meta=boot.meta;course=boot.course;allGroups=boot.groups;allScores=boot.scores;
       await originalSelect(groupNo);
     } catch(err) { alert(err.message); }
+  };
+  function splitMarkup(rows) {
+    if(!rows.length)return '<p>No players yet.</p>';
+    const revealed=rows[0].revealed;
+    const gross=s=>s.gross_incomplete?'Incomplete (BLOB)':String(s.gross);
+    return `<p class="message info">${revealed?'Clubhouse reveal · final results. All scores are locked.':'Live partial results · holes 16–18 hidden until admin reveal. Rankings use visible holes only.'}</p>`+
+      rows.map((p,i)=>`<article class="v2-result"><div class="v2-result-name"><strong>${i+1}. ${escape(p.name)}</strong><span>Playing Handicap ${Number(p.playing_handicap)}</span></div><div class="v2-splits">`+
+        [['Front 9 · holes 1–9','front9'],[revealed?'Back 9 · holes 10–18':'Back 9 · partial through hole 15','back9'],[revealed?'18-hole total':'Partial total · holes 1–15','total']].map(([title,key])=>{
+          const split=p[key];return `<section class="v2-split"><strong>${title}</strong><div class="v2-split-values"><span>Gross <b>${gross(split)}</b></span><span>Stableford <b>${split.stableford}</b></span></div><small>${split.holes}/${split.expected_holes} holes${split.partial?' · partial':''}</small></section>`;
+        }).join('')+'</div></article>').join('');
+  }
+  renderLeaderboard=rows=>{document.getElementById('leaderboardTable').innerHTML=splitMarkup(rows);};
+  renderFinishedGroupResults=async rows=>{
+    document.getElementById('groupFinishResults').innerHTML=splitMarkup(rows);
   };
   const originalRender=renderScoring;
   renderScoring=function() {
@@ -163,7 +178,7 @@
   // Reload is explicit: never silently replace a pending correction after a revision conflict.
   const reload=document.createElement('button');reload.textContent='Reload scores';reload.className='secondary-button';reload.onclick=async()=>{
     if(!confirm('Discard unsaved selections and reload accepted scores?'))return;
-    try{allScores=(await apiGet('scores',{eventId:currentEvent.event_id})).scores;state.pending=null;state.dirty=false;renderScoring();}catch(err){alert(err.message);}
+    try{allScores=(await apiPost({action:'roundBootstrap',eventId:currentEvent.event_id,groupNo:selectedGroupNumber})).scores;state.pending=null;state.dirty=false;renderScoring();}catch(err){alert(err.message);}
   };document.getElementById('scoreScreen').append(reload);
   const access=document.createElement('section');access.className='card v2-credentials';access.innerHTML='<div class="sub-title">Group scoring PINs</div><p>Generate a two-digit PIN after saving the groups. Share it privately with the group scorer. Rotating it ends existing group sessions.</p><label for="v2IssueGroup">Group number</label><input id="v2IssueGroup" type="number" min="1" inputmode="numeric" value="1"><button id="v2Issue" class="secondary-button">Generate / rotate group PIN</button><p id="v2Issued" role="status"></p><button id="v2Recover" class="secondary-button">Recover pending score writes</button><button id="v2AdminLogout">Sign out of admin</button>';
   document.getElementById('adminScreen').append(access);
@@ -172,6 +187,19 @@
     catch(err){document.getElementById('v2Issued').textContent=err.message;}
   };
   access.querySelector('#v2Recover').onclick=async()=>{try{await apiPost({action:'recoverScores',eventId:adminEventId||currentEvent?.event_id});document.getElementById('v2Issued').textContent='Accepted score writes recovered. Reload scores before correcting.';}catch(err){document.getElementById('v2Issued').textContent=err.message;}};
+  const reveal=document.createElement('button');reveal.id='v2Reveal';reveal.textContent='Reveal final clubhouse results';reveal.className='primary-button';
+  access.append(reveal);
+  reveal.onclick=async()=>{
+    if(!confirm('Reveal final results and permanently lock this round? Scores cannot be corrected afterward.'))return;
+    reveal.disabled=true;
+    try {
+      const eventId=adminEventId||currentEvent?.event_id;
+      const result=await apiPost({action:'revealResults',eventId});
+      currentEvent=(await rawGet('currentEvent')).event;
+      renderLeaderboard(result.leaderboard);showScreen('leaderboardScreen');
+    }catch(err){document.getElementById('v2Issued').textContent=err.message;}
+    finally{reveal.disabled=false;}
+  };
   access.querySelector('#v2AdminLogout').onclick=()=>{state.admin='';adminPinValue='';document.getElementById('v2Issued').textContent='';showScreen('homeScreen');};
   const connection=document.createElement('section');connection.className='v2-connection';connection.innerHTML='<strong>V2 development · separate test backend only</strong><form id="v2Connect"><label for="v2Endpoint">Test Apps Script web-app URL</label><input id="v2Endpoint" type="url" autocomplete="off" placeholder="https://script.google.com/macros/s/…/exec" required><button>Connect test backend</button><p id="v2ConnectionStatus" role="status"></p></form>';
   document.body.prepend(connection);document.getElementById('v2Endpoint').value=API_URL;

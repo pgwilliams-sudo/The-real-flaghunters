@@ -1,5 +1,7 @@
 # V2 Phase 1: controlled development baseline
 
+Phase 2 result visibility and reveal now supersede the original future-reveal notes below; see [PHASE2.md](PHASE2.md).
+
 This branch is not deployed. No existing spreadsheet, Apps Script project or production URL is configured in the frontend. `backend/Code.gs` retains the placeholder spreadsheet ID and PIN; `backend/Phase1.gs` supplies the public V2 handlers. Install BOTH files together in a separate test project when a test deployment is authorized. Never install just the legacy file.
 
 ## Delivered behaviour

@@ -21,3 +21,15 @@ dialog input, dialog textarea { width:100%; box-sizing:border-box; margin:10px 0
   .quick-scores { gap:5px; }
   .v2-toolbar button { white-space:normal; }
 }
+
+/* Phase 2 results use compact cards so names never wrap on phones or iPad. */
+.v2-result { margin:12px 0; padding:14px; border:1px solid #d8dfd8; border-radius:12px; background:white; }
+.v2-result-name { min-width:0; margin-bottom:12px; }
+.v2-result-name strong { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.v2-result-name > span { font-size:14px; color:#465746; }
+.v2-splits { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
+.v2-split { min-width:0; padding:10px; background:#f2f6f2; border-radius:8px; }
+.v2-split > strong { font-size:14px; }
+.v2-split-values { display:flex; flex-direction:column; gap:4px; margin:8px 0; }
+.v2-split small { color:#465746; }
+@media(max-width:600px) { .v2-splits {grid-template-columns:1fr;} .v2-split-values {flex-direction:row;flex-wrap:wrap;gap:16px;} }

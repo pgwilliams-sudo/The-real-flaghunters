@@ -1798,13 +1798,7 @@ async function selectGroup(
   try {
 
     const scoreData =
-      await apiGet(
-        'scores',
-        {
-          eventId:
-            currentEvent.event_id
-        }
-      );
+      await apiPost({action:'roundBootstrap',eventId:currentEvent.event_id,groupNo:selectedGroupNumber});
 
 
     allScores =
@@ -4903,9 +4897,9 @@ function renderNearestPin() {
     
 const complete =
   players.length > 0 &&
-  players.every(p =>
+  (competitionData.admin_view || players.every(p =>
     playerFinished(p.player_id)
-  ) &&
+  )) &&
   competitionData.all_groups_finished === true;
 
 

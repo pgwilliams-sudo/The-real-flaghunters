@@ -1057,45 +1057,7 @@ function checkEventCompletion(eventId) {
 }
 
 function getLeaderboard(eventId) {
-  if (!eventId) return [];
-
-  const totals = {};
-
-  getGroups(eventId).forEach(p => {
-    totals[String(p.player_id)] = {
-      player_id: p.player_id,
-      name: p.player_name,
-      playing_handicap:
-        p.playing_handicap,
-      gross: 0,
-      net: 0,
-      stableford: 0,
-      holes: 0,
-      blobs: 0,
-      birdies: 0,
-      eagles: 0
-    };
-  });
-
-  getScores(eventId).forEach(s => {
-    const p = totals[String(s.player_id)];
-    if (!p) return;
-
-    if (s.score_status === 'pickup') p.gross_incomplete = p.net_incomplete = true;
-    p.gross += Number(s.gross) || 0;
-    p.net += Number(s.net) || 0;
-    p.stableford += Number(s.stableford) || 0;
-    p.holes++;
-
-    if (isTrue(s.blob)) p.blobs++;
-    if (isTrue(s.birdie)) p.birdies++;
-    if (isTrue(s.eagle)) p.eagles++;
-  });
-
-  return Object.values(totals)
-    .sort((a, b) =>
-      b.stableford - a.stableford
-    );
+  return v2Leaderboard(eventId);
 }
 
 function getSeasonStats() {
@@ -1103,7 +1065,7 @@ function getSeasonStats() {
     getRowsAsObjects(sheetNamed('Events'))
       .filter(e =>
         String(e.status).toLowerCase() ===
-        'complete'
+        'complete' && v2ResultsRevealed(String(e.event_id))
       );
 
   const groups =

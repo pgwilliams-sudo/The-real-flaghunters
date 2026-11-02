@@ -73,6 +73,8 @@ test('group Finish and completed-event corrections work, future reveal locks eve
 test('pickups count toward completed rounds/POTY; no legacy snapshots are invented',()=>{
   const h=harness();for(let hole=1;hole<=18;hole++)assert.equal(h.save({credential:h.admin,hole,scores:Array.from({length:8},(_,i)=>({playerId:'p'+(i+1),status:'pickup',gross:null,expectedRevision:0}))}).ok,true);
   for(const no of [1,2])assert.equal(h.post({action:'completeGroup',credential:h.admin,eventId:'v2-event',groupNo:no}).ok,true);
+  assert.equal(h.ctx.getSeasonStats().length,0,'unrevealed rounds must not affect public season rankings');
+  assert.equal(h.post({action:'revealResults',credential:h.admin,eventId:'v2-event'}).ok,true);
   const stats=h.ctx.getSeasonStats();assert.equal(stats.length,8);assert.ok(stats.every(p=>p.appearances===1&&p.blobs===18&&p.poty_points===5));assert.equal(h.ctx.v2Meta('legacy-event'),null);assert.equal(h.ctx.getScores('legacy-event').length,0);
 });
 test('pin concurrency, required acknowledgements, explicit finish and saved blind draw survive V2',()=>{

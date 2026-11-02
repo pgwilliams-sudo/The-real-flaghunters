@@ -4,6 +4,8 @@ const {harness}=require('./harness.cjs');
 const endpoint='https://script.google.com/macros/s/synthetic-test/exec';
 async function scenario(browser,name,viewport){
   const h=harness(),context=await browser.newContext({viewport,isMobile:true,hasTouch:true,deviceScaleFactor:2});
+  // Fixtures must follow creation order: the current V2 round is newer than the legacy round.
+  const events=h.sheets.get('Events').rows;events.push(events.splice(1,1)[0]);
   await context.addInitScript(url=>localStorage.setItem('flaghunters.v2.api',url),endpoint);
   const metaRow=h.sheets.get('RoundEventsV2').rows[1],meta=JSON.parse(metaRow[1]);delete meta.confirmed_groups['1'];metaRow[1]=JSON.stringify(meta);
   let pinLogins=0;
@@ -77,7 +79,7 @@ async function scenario(browser,name,viewport){
   await page.evaluate(()=>showScreen('homeScreen'));await page.getByRole('button',{name:/Saturday Competitions/}).click();
   await page.locator('#competitionContent').getByText('Nearest the Pin',{exact:false}).first().waitFor();
   assert.ok((await page.locator('#competitionContent').innerText()).includes('Blind Pairs'));assert.ok((await page.locator('#competitionContent').innerText()).includes('2/3/4 Team Game'));
-  const expected=h.ctx.getScores('v2-event').filter(s=>s.player_id==='p1').reduce((sum,s)=>sum+s.stableford,0);
+  const expected=h.ctx.getScores('v2-event').filter(s=>s.player_id==='p1'&&s.hole<=15).reduce((sum,s)=>sum+s.stableford,0);
   assert.ok((await page.locator('#competitionContent').innerText()).split(expected+' pts').length>=3,'Blind Pairs and 2/3/4 totals must both match the fixture');
   // Group 1's cached session must never silently open Group 2.
   await page.evaluate(()=>showScreen('adminScreen'));
@@ -93,6 +95,36 @@ async function scenario(browser,name,viewport){
   await page.locator('#v2Code').fill(rotated.pin);
   await page.getByRole('button',{name:'Open group',exact:true}).click();
   await page.locator('#scoreScreen.active').waitFor();
+  // Public leaderboard uses partial splits and keeps long names on one line.
+  h.sheets.get('Players').rows[1][1]='A Very Long Test Player Name For Narrow Screens';
+  await page.evaluate(()=>showScreen('homeScreen'));
+  await page.getByRole('button',{name:/Live Leaderboard/}).click();
+  await page.locator('#leaderboardTable').getByText('Back 9 · partial through hole 15',{exact:true}).first().waitFor();
+  assert.equal(await page.locator('#leaderboardTable .v2-result-name strong').first().evaluate(el=>getComputedStyle(el).whiteSpace),'nowrap');
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
+  assert.equal(await page.locator('#leaderboardTable').getByText('18-hole total',{exact:true}).count(),0);
+  // Complete synthetic scores through the real backend, then reveal through admin UI.
+  for(let hole=1;hole<=18;hole++) {
+    const saved=h.ctx.getScores('v2-event');
+    const missing=Array.from({length:8},(_,i)=>i+1).filter(i=>!saved.some(s=>s.player_id==='p'+i&&s.hole===hole));
+    if(missing.length)assert.equal(h.save({credential:h.admin,hole,scores:missing.map(i=>({playerId:'p'+i,status:'scored',gross:4,expectedRevision:0}))}).ok,true);
+  }
+  for(const groupNo of [1,2]) {
+    assert.equal(h.post({action:'updatePinLeader',credential:h.admin,eventId:'v2-event',groupNo,hole:3,pinAction:'keep',expectedLeader:'p1'}).ok,true);
+    assert.equal(h.post({action:'completeGroup',credential:h.admin,eventId:'v2-event',groupNo}).ok,true);
+  }
+  await page.evaluate(()=>showScreen('homeScreen'));
+  await page.getByRole('button',{name:/Admin Setup/}).click();
+  await page.locator('#adminPin').fill(h.properties.V2_ADMIN_SECRET);
+  await page.getByRole('button',{name:'Login',exact:true}).click();
+  await page.locator('#adminScreen.active').waitFor();
+  await page.locator('#v2Reveal').click();
+  await page.locator('#leaderboardScreen.active').waitFor();
+  await page.locator('#leaderboardTable').getByText('18-hole total',{exact:true}).first().waitFor();
+  assert.ok((await page.locator('#leaderboardTable').innerText()).includes('final results'));
+  assert.ok((await page.locator('#leaderboardTable').innerText()).includes('Incomplete (BLOB)'));
+  assert.equal(h.ctx.v2Meta('v2-event').locked,true);
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
   assert.deepEqual(errors,[]);console.log('PASS '+name+': credential rejection, touch BLOB, corrections/reason/history, Finish/edit, layout');
   await context.close();
 }
