@@ -6,10 +6,12 @@ async function scenario(browser,name,viewport){
   const h=harness(),context=await browser.newContext({viewport,isMobile:true,hasTouch:true,deviceScaleFactor:2});
   await context.addInitScript(url=>localStorage.setItem('flaghunters.v2.api',url),endpoint);
   const metaRow=h.sheets.get('RoundEventsV2').rows[1],meta=JSON.parse(metaRow[1]);delete meta.confirmed_groups['1'];metaRow[1]=JSON.stringify(meta);
+  let pinLogins=0;
   const errors=[];const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
   await page.route('**/*',async route=>{
     const req=route.request(),url=req.url();
     if(url.startsWith(endpoint)) {
+      if(req.method()==='POST'&&JSON.parse(req.postData()).action==='openGroup')pinLogins++;
       const result=req.method()==='POST'?h.post(JSON.parse(req.postData())):h.ctx.doGet({parameter:Object.fromEntries(new URL(url).searchParams)});
       return route.fulfill({status:200,contentType:'application/json',headers:{'access-control-allow-origin':'*'},body:JSON.stringify(result)});
     }
@@ -21,9 +23,9 @@ async function scenario(browser,name,viewport){
   await page.goto('http://flaghunters.test/');
   await page.getByRole('button',{name:/Enter Scores/}).click();
   await page.locator('.group-button').first().click();
-  await page.locator('#v2Code').fill('wrong-code');await page.getByRole('button',{name:'Open group',exact:true}).click();
-  await page.locator('#v2AccessError').filter({hasText:/credential/}).waitFor();
-  await page.locator('#v2Code').fill(h.group);await page.getByRole('button',{name:'Open group',exact:true}).click();
+  await page.locator('#v2Code').fill(h.groupPin==='00'?'01':'00');await page.getByRole('button',{name:'Open group',exact:true}).click();
+  await page.locator('#v2AccessError').filter({hasText:/PIN/}).waitFor();
+  await page.locator('#v2Code').fill(h.groupPin);await page.getByRole('button',{name:'Open group',exact:true}).click();
   await page.locator('#handicapScreen.active').waitFor();
   await page.locator('#confirmHandicapsButton').tap();
   await page.locator('#scoreScreen.active').waitFor();
@@ -31,7 +33,23 @@ async function scenario(browser,name,viewport){
   assert.equal(await page.locator('.v2-pickup[aria-pressed=true]').count(),4);
   const bbox=await page.locator('.v2-pickup').first().boundingBox();assert.ok(bbox.height>=44);
   await page.getByRole('button',{name:'Save this hole',exact:true}).tap();await page.locator('#scoreMessage').filter({hasText:'Saved to server.'}).waitFor();
+  // Same group and reload both retain the session without a second PIN prompt.
+  const beforeReload=pinLogins;
+  await page.reload();
+  await page.getByRole('button',{name:/Enter Scores/}).click();
+  await page.locator('.group-button').first().click();
+  await page.locator('#scoreScreen.active').waitFor();
+  assert.equal(await page.locator('#v2Code').count(),0);
+  assert.equal(pinLogins,beforeReload);
+  await page.evaluate(()=>showScreen('homeScreen'));
+  await page.getByRole('button',{name:/Enter Scores/}).click();
+  await page.locator('.group-button').first().click();
+  await page.locator('#scoreScreen.active').waitFor();
+  assert.equal(pinLogins,beforeReload);
+  assert.equal(await page.evaluate(()=>Object.keys(localStorage).some(k=>k.startsWith('flaghunters.v2.group:'))),false);
   assert.equal(h.ctx.getScores('v2-event').length,4);assert.equal(h.ctx.getScores('v2-event')[0].gross,null);
+  // Reopening advances to the next unplayed hole; explicitly return to Hole 1.
+  await page.locator('#v2Hole').selectOption('0');
   // Correct pickup to a real numeric zero-point score. Missing reason must block.
   await page.locator('#score-p1 .quick-score').first().tap();await page.getByRole('button',{name:'Save this hole',exact:true}).tap();
   await page.locator('#scoreMessage').filter({hasText:/correction reason/}).waitFor();assert.equal(h.ctx.getScores('v2-event')[0].revision,1);
@@ -52,8 +70,8 @@ async function scenario(browser,name,viewport){
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false,'horizontal overflow');
   await page.evaluate(()=>showScreen('homeScreen'));await page.getByRole('button',{name:/Admin Setup/}).click();
   await page.locator('#adminPin').fill(h.properties.V2_ADMIN_SECRET);await page.getByRole('button',{name:'Login',exact:true}).click();await page.locator('#adminScreen.active').waitFor();
-  await page.locator('#v2IssueGroup').fill('2');await page.locator('#v2Issue').tap();await page.waitForFunction(()=>document.getElementById('v2Issued').textContent.includes('.'));
-  assert.equal(h.post({action:'verifyGroupCredential',credential:await page.locator('#v2Issued').innerText(),eventId:'v2-event',groupNo:2}).ok,true);
+  await page.locator('#v2IssueGroup').fill('2');await page.locator('#v2Issue').tap();await page.waitForFunction(()=>/^[0-9]{2}$/.test(document.getElementById('v2Issued').textContent));
+  assert.equal(h.post({action:'openGroup',pin:await page.locator('#v2Issued').innerText(),eventId:'v2-event',groupNo:2}).ok,true);
   // Read existing competition renderers using synthetic saved configuration and varied scores.
   h.ctx.saveCompetitionRecord('v2-event',{row:null,enabled:true,holes:[3],pins:{3:'p1'},pairs:[['p1','p2'],['p3','p4'],['p5','p6'],['p7','p8']],blindEnabled:true,team234Enabled:true});
   await page.evaluate(()=>showScreen('homeScreen'));await page.getByRole('button',{name:/Saturday Competitions/}).click();
@@ -61,6 +79,20 @@ async function scenario(browser,name,viewport){
   assert.ok((await page.locator('#competitionContent').innerText()).includes('Blind Pairs'));assert.ok((await page.locator('#competitionContent').innerText()).includes('2/3/4 Team Game'));
   const expected=h.ctx.getScores('v2-event').filter(s=>s.player_id==='p1').reduce((sum,s)=>sum+s.stableford,0);
   assert.ok((await page.locator('#competitionContent').innerText()).split(expected+' pts').length>=3,'Blind Pairs and 2/3/4 totals must both match the fixture');
+  // Group 1's cached session must never silently open Group 2.
+  await page.evaluate(()=>showScreen('adminScreen'));
+  await page.locator('#v2AdminLogout').click();
+  await page.getByRole('button',{name:/Enter Scores/}).click();
+  await page.locator('.group-button').nth(1).click();
+  await page.locator('#v2Code').waitFor();
+  await page.locator('#v2Close').click();
+  const rotated=h.post({action:'issueGroupCredential',credential:h.admin,eventId:'v2-event',groupNo:1});
+  assert.equal(rotated.ok,true);
+  // Revocation invalidates the cached session and prompts for the new PIN.
+  await page.locator('.group-button').first().click();
+  await page.locator('#v2Code').fill(rotated.pin);
+  await page.getByRole('button',{name:'Open group',exact:true}).click();
+  await page.locator('#scoreScreen.active').waitFor();
   assert.deepEqual(errors,[]);console.log('PASS '+name+': credential rejection, touch BLOB, corrections/reason/history, Finish/edit, layout');
   await context.close();
 }

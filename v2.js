@@ -1,4 +1,4 @@
-/* Phase 1 adapter: no production endpoint, no credentials persisted to browser storage. */
+/* Phase 1 adapter: no production endpoint, group sessions retained in sessionStorage; admin credentials remain in memory. */
 (() => {
   'use strict';
   const state={admin:'',group:'',meta:null,pending:null,dirty:false};
@@ -11,13 +11,16 @@
     d.innerHTML=`<h2>${escape(title)}</h2>${body}<button type="button" id="v2Close">Close</button>`;
     document.body.append(d); d.querySelector('#v2Close').onclick=()=>d.close(); d.showModal(); return d;
   }
-  function credentialInput() {
+  function groupSessionKey(groupNo) { return 'flaghunters.v2.group:'+API_URL+':'+currentEvent.event_id+':'+Number(groupNo); }
+  function readGroupSession(key) { try {return JSON.parse(sessionStorage.getItem(key)||'null');}catch(_){return null;} }
+  function forgetGroupSession(key) { try {sessionStorage.removeItem(key);}catch(_){} }
+  function credentialInput(key) {
     return new Promise(resolve=>{
-      const d=modal('Group scoring access','<form id="v2Access"><label for="v2Code">Enter the code provided to your assigned scorer</label><input id="v2Code" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" required><button class="primary-button">Open group</button><p id="v2AccessError" role="alert"></p></form>');
+      const d=modal('Group scoring access','<form id="v2Access"><label for="v2Code">Enter your two-digit group PIN</label><input id="v2Code" type="password" inputmode="numeric" pattern="[0-9]{2}" minlength="2" maxlength="2" autocomplete="off" required><button class="primary-button">Open group</button><p id="v2AccessError" role="alert"></p></form>');
       d.addEventListener('close',()=>resolve(null),{once:true});
       d.querySelector('form').onsubmit=async event=>{
-        event.preventDefault(); const token=d.querySelector('input').value.trim();
-        try { await rawPost({action:'verifyGroupCredential',credential:token,eventId:currentEvent.event_id,groupNo:selectedGroupNumber}); resolve(token);d.close(); }
+        event.preventDefault(); const pin=d.querySelector('input').value;
+        try { const result=await rawPost({action:'openGroup',pin,eventId:currentEvent.event_id,groupNo:selectedGroupNumber}); try {sessionStorage.setItem(key,JSON.stringify({token:result.token,expires_at:result.expires_at}));}catch(_){} resolve(result.token);d.close(); }
         catch(err) { d.querySelector('#v2AccessError').textContent=err.message; }
       };
     });
@@ -41,7 +44,19 @@
   selectGroup=async function(groupNo) {
     selectedGroupNumber=Number(groupNo);
     try {
-      if(!state.admin) { const token=await credentialInput();if(!token)return;state.group=token; }
+      if(!state.admin) {
+        const key=groupSessionKey(groupNo),cached=readGroupSession(key);
+        let token=cached?.expires_at>Date.now()?cached.token:null;
+        if(token) {
+          try {await rawPost({action:'verifyGroupCredential',credential:token,eventId:currentEvent.event_id,groupNo:Number(groupNo)});}
+          catch(err) {
+            if(!/credential|expired|authorize/i.test(err.message)) throw err;
+            forgetGroupSession(key);token=null;
+          }
+        }
+        if(!token) token=await credentialInput(key);
+        if(!token)return;state.group=token;
+      }
       const boot=await apiPost({action:'roundBootstrap',eventId:currentEvent.event_id,groupNo:Number(groupNo)});
       state.meta=boot.meta;course=boot.course;allGroups=boot.groups;allScores=boot.scores;
       await originalSelect(groupNo);
@@ -150,10 +165,10 @@
     if(!confirm('Discard unsaved selections and reload accepted scores?'))return;
     try{allScores=(await apiGet('scores',{eventId:currentEvent.event_id})).scores;state.pending=null;state.dirty=false;renderScoring();}catch(err){alert(err.message);}
   };document.getElementById('scoreScreen').append(reload);
-  const access=document.createElement('section');access.className='card v2-credentials';access.innerHTML='<div class="sub-title">Scorer access codes</div><p>Issue a code after saving the groups. Give it privately to the assigned scorer. Rotating a code revokes the previous code.</p><label for="v2IssueGroup">Group number</label><input id="v2IssueGroup" type="number" min="1" inputmode="numeric" value="1"><button id="v2Issue" class="secondary-button">Issue / rotate group code</button><p id="v2Issued" role="status"></p><button id="v2Recover" class="secondary-button">Recover pending score writes</button><button id="v2AdminLogout">Sign out of admin</button>';
+  const access=document.createElement('section');access.className='card v2-credentials';access.innerHTML='<div class="sub-title">Group scoring PINs</div><p>Generate a two-digit PIN after saving the groups. Share it privately with the group scorer. Rotating it ends existing group sessions.</p><label for="v2IssueGroup">Group number</label><input id="v2IssueGroup" type="number" min="1" inputmode="numeric" value="1"><button id="v2Issue" class="secondary-button">Generate / rotate group PIN</button><p id="v2Issued" role="status"></p><button id="v2Recover" class="secondary-button">Recover pending score writes</button><button id="v2AdminLogout">Sign out of admin</button>';
   document.getElementById('adminScreen').append(access);
   access.querySelector('#v2Issue').onclick=async()=>{
-    try{const eventId=adminEventId||currentEvent?.event_id;if(!eventId)throw new Error('Create a round and save groups first.');const r=await apiPost({action:'issueGroupCredential',eventId,groupNo:Number(document.getElementById('v2IssueGroup').value)});document.getElementById('v2Issued').textContent=r.token;}
+    try{const eventId=adminEventId||currentEvent?.event_id;if(!eventId)throw new Error('Create a round and save groups first.');const r=await apiPost({action:'issueGroupCredential',eventId,groupNo:Number(document.getElementById('v2IssueGroup').value)});document.getElementById('v2Issued').textContent=r.pin;}
     catch(err){document.getElementById('v2Issued').textContent=err.message;}
   };
   access.querySelector('#v2Recover').onclick=async()=>{try{await apiPost({action:'recoverScores',eventId:adminEventId||currentEvent?.event_id});document.getElementById('v2Issued').textContent='Accepted score writes recovered. Reload scores before correcting.';}catch(err){document.getElementById('v2Issued').textContent=err.message;}};

@@ -68,11 +68,48 @@ function v2Writable(eventId) {
   return meta;
 }
 function v2Issue(role,eventId,groupNo) {
-  const id=v2Id(),secret=v2Id()+v2Id();
+  const id=v2Id(),secret=role==='scorer'?v2GroupSecret(id):v2Id()+v2Id();
   const data={role,event_id:String(eventId||''),group_no:Number(groupNo)||0,hash:v2Hash(secret),
     expires_at:Date.now()+(role==='admin'?12*3600:30*86400)*1000,revoked:false};
   v2Append('ScoringCredentials',[id,JSON.stringify(data)]);
   return {token:id+'.'+secret,credential_id:id,role,expires_at:data.expires_at};
+}
+// The two-digit PIN only opens a scoped bearer session; it is not a person's identity.
+function v2GroupSecret(id) {
+  const secret=v2Props().getProperty('V2_ADMIN_SECRET');
+  if(!secret || secret.length<32) throw new Error('Configure the separate admin secret first');
+  return v2Hash(secret+':group-session:'+id);
+}
+function v2GroupPin(previousHash) {
+  // Rejection sampling keeps 00–99 equally likely and rotation changes the PIN.
+  for(;;) {
+    const n=parseInt(v2Id().replace(/-/g,'').slice(0,2),16);
+    if(n<200) {
+      const pin=String(n%100).padStart(2,'0');
+      if(!previousHash || !v2Equal(v2Hash(pin),previousHash)) return pin;
+    }
+  }
+}
+function v2OpenGroup(data) {
+  return withScriptLock(()=>{
+    v2Writable(data.eventId);
+    const row=v2Rows('ScoringCredentials').reverse().find(r=>{
+      const c=JSON.parse(r.data);
+      return c.role==='scorer' && c.event_id===String(data.eventId) &&
+        c.group_no===Number(data.groupNo) && !c.revoked && c.expires_at>Date.now() && c.pin_hash;
+    });
+    if(!row) throw new Error('Group PIN invalid or expired');
+    const c=JSON.parse(row.data),now=Date.now();
+    if(!c.attempt_window || now-c.attempt_window>=60000) {c.attempt_window=now;c.attempts=0;}
+    if(c.attempts>=5) throw new Error('Too many PIN attempts. Try again in one minute.');
+    c.attempts++;
+    const valid=/^[0-9]{2}$/.test(String(data.pin||'')) && v2Equal(c.pin_hash,v2Hash(String(data.pin)));
+    v2Put('ScoringCredentials',row.credential_id,[row.credential_id,JSON.stringify(c)]);
+    if(!valid) throw new Error('Group PIN invalid or expired');
+    const token=row.credential_id+'.'+v2GroupSecret(row.credential_id);
+    v2Scope(v2Auth(token),data.eventId,[],data.groupNo);
+    return {ok:true,token,credential_id:row.credential_id,expires_at:c.expires_at};
+  });
 }
 function v2Auth(token) {
   const parts=String(token||'').split('.');
@@ -240,14 +277,21 @@ function doPost(e) {
         cache.remove('v2-admin-failures');return {ok:true,...v2Issue('admin')};
       }));
     }
+    if(action==='openGroup') return jsonResponse(v2OpenGroup(data));
     const actor=v2Auth(data.credential);
     if(action==='issueGroupCredential') return jsonResponse(withScriptLock(()=>{
       v2Admin(actor); v2Writable(data.eventId);
       const group=getGroups(data.eventId).filter(p=>p.group_no===Number(data.groupNo));
       if(!group.length || group.filter(p=>p.scorer).length!==1) throw new Error('Group must have one assigned scorer');
+      const previous=v2Rows('ScoringCredentials').reverse().find(r=>{const c=JSON.parse(r.data);return c.role==='scorer'&&c.event_id===String(data.eventId)&&c.group_no===Number(data.groupNo)&&!c.revoked;});
+      const pin=v2GroupPin(previous&&JSON.parse(previous.data).pin_hash);
       // Rotation revokes earlier credentials for this group.
       v2Rows('ScoringCredentials').forEach(r=>{const c=JSON.parse(r.data);if(c.role==='scorer'&&c.event_id===String(data.eventId)&&c.group_no===Number(data.groupNo)){c.revoked=true;v2Put('ScoringCredentials',r.credential_id,[r.credential_id,JSON.stringify(c)]);}});
-      return {ok:true,...v2Issue('scorer',data.eventId,data.groupNo)};
+      const issued=v2Issue('scorer',data.eventId,data.groupNo);
+      const row=v2Rows('ScoringCredentials').find(r=>r.credential_id===issued.credential_id),c=JSON.parse(row.data);
+      c.pin_hash=v2Hash(pin);
+      v2Put('ScoringCredentials',row.credential_id,[row.credential_id,JSON.stringify(c)]);
+      return {ok:true,pin,credential_id:issued.credential_id,expires_at:issued.expires_at};
     }));
     if(action==='verifyGroupCredential') { v2Scope(actor,data.eventId,[],data.groupNo); return jsonResponse({ok:true,actor}); }
     if(action==='scoreHistory') {

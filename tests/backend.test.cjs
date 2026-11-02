@@ -98,10 +98,11 @@ test('GET competition reads are side-effect free, including missing helper sheet
 test('historical numeric corrections are audited without inventing snapshots or rewriting legacy scores',()=>{
   const h=harness();h.sheets.get('Groups').rows.push(['legacy-event',1,'p1',1,true,1,1,true]);h.sheets.get('Scores').rows.push(['legacy-event','p1',1,5,4,2,false,false,false,'old']);
   const issued=h.post({action:'issueGroupCredential',credential:h.admin,eventId:'legacy-event',groupNo:1});assert.equal(issued.ok,true);
-  const scores=[{playerId:'p1',status:'scored',gross:4,expectedRevision:0}];assert.match(h.save({credential:issued.token,eventId:'legacy-event',scores}).error,/reason/);
-  scores[0].reason='Verified scorecard';assert.equal(h.save({credential:issued.token,eventId:'legacy-event',scores}).ok,true);
+  const session=h.post({action:'openGroup',eventId:'legacy-event',groupNo:1,pin:issued.pin});
+  const scores=[{playerId:'p1',status:'scored',gross:4,expectedRevision:0}];assert.match(h.save({credential:session.token,eventId:'legacy-event',scores}).error,/reason/);
+  scores[0].reason='Verified scorecard';assert.equal(h.save({credential:session.token,eventId:'legacy-event',scores}).ok,true);
   const current=h.ctx.getScores('legacy-event')[0];assert.equal(current.gross,4);assert.equal(current.course_snapshot_id,null);assert.equal(current.calculation_source,'legacy_live_course_not_historical');assert.equal(h.sheets.get('Scores').rows[1][3],5);assert.equal(h.ctx.v2Meta('legacy-event'),null);
-  assert.match(h.save({credential:issued.token,eventId:'legacy-event',scores:[{playerId:'p1',status:'pickup',gross:null,expectedRevision:1,reason:'Test'}]}).error,/Legacy/);
+  assert.match(h.save({credential:session.token,eventId:'legacy-event',scores:[{playerId:'p1',status:'pickup',gross:null,expectedRevision:1,reason:'Test'}]}).error,/Legacy/);
 });
 test('Eclectic candidates exclude pickups but retain numeric zero-point scores',()=>{
   const h=harness();h.save();h.save({hole:2,scores:[{playerId:'p1',status:'scored',gross:12,expectedRevision:0}]});const candidates=h.ctx.v2EclecticCandidates('v2-event');assert.equal(candidates.length,1);assert.equal(candidates[0].gross,12);
@@ -127,4 +128,65 @@ test('fault recovery of corrections never exposes a mixture of batch revisions',
 });
 test('admin login throttles repeated failures',()=>{
   const h=harness();for(let i=0;i<10;i++)assert.equal(h.post({action:'adminLogin',pin:'wrong'}).ok,false);assert.match(h.post({action:'adminLogin',pin:h.properties.V2_ADMIN_SECRET}).error,/Too many/);
+});
+
+test('two-digit group PIN opens a scoped reusable session, never an admin identity',()=>{
+  const h=harness();
+  assert.match(h.groupPin,/^\d{2}$/);
+  const opened=h.post({action:'openGroup',eventId:'v2-event',groupNo:1,pin:h.groupPin});
+  assert.equal(opened.ok,true);assert.equal(opened.token,h.group);
+  assert.equal(h.save({credential:opened.token}).ok,true);
+  assert.match(h.save({credential:opened.token,scores:[{playerId:'p5',status:'pickup',gross:null,expectedRevision:0}]}).error,/player/);
+  assert.match(h.post({action:'roundBootstrap',credential:opened.token,eventId:'legacy-event',groupNo:1}).error,/authorize/);
+  assert.match(h.post({action:'issueGroupCredential',credential:opened.token,eventId:'v2-event',groupNo:2}).error,/Admin/);
+  const history=h.post({action:'scoreHistory',credential:opened.token,eventId:'v2-event',playerId:'p1'}).history;
+  assert.equal(history[0].actor.credential_id,opened.credential_id);
+  assert.equal(history[0].actor.group_no,1);assert.equal(history[0].actor.role,'scorer');
+  assert.equal(history[0].actor.name,undefined);
+});
+test('PIN generation preserves 00/leading zeroes and rotation changes PIN and revokes sessions',()=>{
+  const h=harness();
+  h.ctx.v2Id=()=> '00000000-0000-4000-8000-000000000000';
+  assert.equal(h.ctx.v2GroupPin(), '00');
+  h.ctx.v2Id=()=> '09000000-0000-4000-8000-000000000000';
+  assert.equal(h.ctx.v2GroupPin(), '09');
+  h.ctx.v2Id=()=>crypto.randomUUID();
+  const rotated=h.post({action:'issueGroupCredential',credential:h.admin,eventId:'v2-event',groupNo:1});
+  assert.equal(rotated.ok,true);assert.match(rotated.pin,/^\d{2}$/);assert.notEqual(rotated.pin,h.groupPin);
+  assert.equal(rotated.token,undefined);
+  assert.match(h.save().error,/expired/);
+  assert.equal(h.post({action:'openGroup',eventId:'v2-event',groupNo:1,pin:h.groupPin}).ok,false);
+  assert.equal(h.post({action:'openGroup',eventId:'v2-event',groupNo:1,pin:rotated.pin}).ok,true);
+});
+test('PIN attempt limiting persists without cache, is group-scoped and recovers after a minute',()=>{
+  const h=harness(),row=h.sheets.get('ScoringCredentials').rows.find(r=>r[0]===h.group.split('.')[0]);
+  const wrong=h.groupPin==='00'?'01':'00';
+  // Harness setup used one successful attempt; four failures exhaust this window.
+  for(let i=0;i<4;i++)assert.match(h.post({action:'openGroup',eventId:'v2-event',groupNo:1,pin:wrong}).error,/invalid/);
+  h.cache.clear();
+  assert.match(h.post({action:'openGroup',eventId:'v2-event',groupNo:1,pin:h.groupPin}).error,/Too many/);
+  assert.equal(h.post({action:'openGroup',eventId:'v2-event',groupNo:2,pin:h.group2Pin}).ok,true);
+  assert.equal(h.save().ok,true,'existing sessions do not spend PIN attempts');
+  const c=JSON.parse(row[1]);c.attempt_window=Date.now()-61000;row[1]=JSON.stringify(c);
+  assert.equal(h.post({action:'openGroup',eventId:'v2-event',groupNo:1,pin:h.groupPin}).ok,true);
+  assert.equal(h.post({action:'openGroup',eventId:'v2-event',groupNo:1,pin:'1'}).ok,false);
+});
+test('public responses exclude PINs, PIN hashes and session secrets; locks still reject PIN login',()=>{
+  const h=harness();
+  const publicResponses=['groups','currentEvent','scores','competitions','status'].map(action=>h.ctx.doGet({parameter:{action,eventId:'v2-event'}}));
+  const bootstrap=h.post({action:'roundBootstrap',credential:h.group,eventId:'v2-event',groupNo:1});
+  const encoded=JSON.stringify([...publicResponses,bootstrap]);
+  assert.doesNotMatch(encoded,/pin_hash|attempt_window|credential_id|"pin"|"token"/);
+  assert.equal(encoded.includes(h.group),false);
+  const credentials=h.sheets.get('ScoringCredentials').rows.slice(1).map(r=>JSON.parse(r[1]));
+  assert.ok(credentials.filter(c=>c.role==='scorer').every(c=>c.pin_hash&&!('pin' in c)));
+  const row=h.sheets.get('RoundEventsV2').rows[1],meta=JSON.parse(row[1]);meta.revealed_at=new Date().toISOString();row[1]=JSON.stringify(meta);
+  assert.match(h.post({action:'openGroup',eventId:'v2-event',groupNo:1,pin:h.groupPin}).error,/locked/);
+});
+
+test('PIN exchange accepts 00 literally and rejects malformed PINs without coercion',()=>{
+  const h=harness(),row=h.sheets.get('ScoringCredentials').rows.find(r=>r[0]===h.group.split('.')[0]);
+  const c=JSON.parse(row[1]);c.pin_hash=h.ctx.v2Hash('00');row[1]=JSON.stringify(c);
+  for(const pin of [0,'0','000'])assert.equal(h.post({action:'openGroup',eventId:'v2-event',groupNo:1,pin}).ok,false);
+  assert.equal(h.post({action:'openGroup',eventId:'v2-event',groupNo:1,pin:'00'}).ok,true);
 });

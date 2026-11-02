@@ -33,13 +33,15 @@ function harness() {
   context.initializeV2TestSchema();context.v2SnapshotEvent('v2-event');context.v2AfterGroupSave('v2-event');
   function post(data){return context.doPost({postData:{contents:JSON.stringify(data)}});}
   const admin=post({action:'adminLogin',pin:properties.V2_ADMIN_SECRET});if(!admin.ok)throw Error(admin.error);
-  const group=post({action:'issueGroupCredential',credential:admin.token,eventId:'v2-event',groupNo:1});
-  const group2=post({action:'issueGroupCredential',credential:admin.token,eventId:'v2-event',groupNo:2});
+  const groupPin=post({action:'issueGroupCredential',credential:admin.token,eventId:'v2-event',groupNo:1});
+  const group2Pin=post({action:'issueGroupCredential',credential:admin.token,eventId:'v2-event',groupNo:2});
+  const group=post({action:'openGroup',eventId:'v2-event',groupNo:1,pin:groupPin.pin});
+  const group2=post({action:'openGroup',eventId:'v2-event',groupNo:2,pin:group2Pin.pin});
   for(const [no,token] of [[1,group.token],[2,group2.token]]) {
     const confirmed=post({action:'confirmGroupHandicaps',credential:token,eventId:'v2-event',groupNo:no,handicaps:Array.from({length:4},(_,i)=>({player_id:'p'+((no-1)*4+i+1),handicap_index:i+1}))});if(!confirmed.ok)throw Error(confirmed.error);
   }
   writes=0;
-  return {ctx:context,post,sheets,properties,admin:admin.token,group:group.token,group2:group2.token,
+  return {ctx:context,post,sheets,properties,admin:admin.token,groupPin:groupPin.pin,group2Pin:group2Pin.pin,cache,group:group.token,group2:group2.token,
     fault(n,when){writes=0;fault={n,when};},clearFault(){fault=null;writes=0;},get writes(){return writes;},
     save(overrides={}){return post({action:'saveHoleScores',credential:group.token,eventId:'v2-event',hole:1,operationId:crypto.randomUUID(),scores:[{playerId:'p1',status:'pickup',gross:null,expectedRevision:0}],...overrides});}};
 }
