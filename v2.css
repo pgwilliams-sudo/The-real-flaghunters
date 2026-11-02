@@ -34,8 +34,6 @@ dialog input, dialog textarea { width:100%; box-sizing:border-box; margin:10px 0
 .v2-split small { color:#465746; }
 @media(max-width:600px) { .v2-splits {grid-template-columns:1fr;} .v2-split-values {flex-direction:row;flex-wrap:wrap;gap:16px;} }
 
-.v2-result[role=button] { cursor:pointer; }
-.v2-result[role=button]:focus-visible { outline:3px solid #826000; outline-offset:3px; }
 .v2-scorecard-dialog { box-sizing:border-box; padding:16px; }
 .v2-scorecard-back { position:sticky; top:0; z-index:1; width:100%; background:#173c2b; color:white; border:0; border-radius:8px; margin-bottom:12px; }
 .v2-scorecard-name { font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -45,3 +43,17 @@ dialog input, dialog textarea { width:100%; box-sizing:border-box; margin:10px 0
 .v2-scorecard-table tbody tr:nth-child(even) { background:#f2f6f2; }
 .v2-scorecard-table abbr { text-decoration:none; }
 .v2-scorecard-dialog .v2-splits { grid-template-columns:1fr; }
+
+/* Phone-first leaderboard: exactly five columns and one line per player. */
+#leaderboardScreen > .card { padding:10px; }
+.v2-leaderboard { width:100%; table-layout:fixed; border-collapse:collapse; font-variant-numeric:tabular-nums; }
+.v2-leaderboard caption { text-align:left; font-size:12px; line-height:1.4; color:#465746; margin:0 0 10px; }
+.v2-col-player { width:48%; } .v2-col-gross { width:16%; } .v2-col-stb { width:14%; } .v2-col-nine { width:11%; }
+.v2-leaderboard th,.v2-leaderboard td { padding:10px 2px; text-align:right; white-space:nowrap; font-size:14px; line-height:24px; }
+.v2-leaderboard th:first-child { text-align:left; }
+.v2-table-name { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; }
+.v2-leaderboard tbody tr { height:46px; cursor:pointer; }
+.v2-leaderboard tbody tr:nth-child(even) { background:#f2f6f2; }
+.v2-leaderboard tbody tr:hover,.v2-leaderboard tbody tr:focus { background:#e5eee6; outline:2px solid #826000; outline-offset:-2px; }
+.v2-leaderboard abbr { text-decoration:none; }
+.v2-table-stb { font-weight:750; }

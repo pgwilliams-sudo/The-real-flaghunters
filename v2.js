@@ -70,14 +70,21 @@
         return `<section class="v2-split"><strong>${title}</strong><div class="v2-split-values"><span>Gross <b>${gross}</b></span><span>Stableford <b>${split.stableford}</b></span></div><small>${split.holes}/${split.expected_holes} holes${split.partial?' · partial':''}</small></section>`;
       }).join('')+'</div>';
   }
-  function splitMarkup(rows,clickable=false) {
+  function splitMarkup(rows) {
     if(!rows.length)return '<p>No players yet.</p>';
     const revealed=rows[0].revealed;
     return `<p class="message info">${revealed?'Clubhouse reveal · final results. All scores are locked.':'Live partial results · holes 16–18 hidden until admin reveal. Rankings use visible holes only.'}</p>`+
-      rows.map((p,i)=>`<article class="v2-result" ${clickable?`role="button" tabindex="0" data-scorecard-player="${escape(p.player_id)}" aria-label="Open scorecard for ${escape(p.name)}"`:''}><div class="v2-result-name"><strong>${i+1}. ${escape(p.name)}</strong><span>Playing Handicap ${Number(p.playing_handicap)}</span></div>${resultSplits(p)}</article>`).join('');
+      rows.map((p,i)=>`<article class="v2-result"><div class="v2-result-name"><strong>${i+1}. ${escape(p.name)}</strong><span>Playing Handicap ${Number(p.playing_handicap)}</span></div>${resultSplits(p)}</article>`).join('');
   }
   const leaderboard=document.getElementById('leaderboardTable');
-  renderLeaderboard=rows=>{leaderboard.innerHTML=splitMarkup(rows,true);};
+  function leaderboardTable(rows) {
+    if(!rows.length)return '<p>No players yet.</p>';
+    const revealed=rows[0].revealed;
+    const points=split=>`${split.stableford}${split.partial?'*':''}`;
+    return `<p class="message info">${revealed?'Final results · scores locked.':'Partial results · holes 16–18 hidden. B9 is partial through hole 15; Gross and Stb use holes 1–15.'}</p><table class="v2-leaderboard"><caption>Tap a player row for their scorecard. F9/B9: Stableford for physical holes 1–9/10–18. * = partial; Gross — = incomplete (BLOB).</caption><colgroup><col class="v2-col-player"><col class="v2-col-gross"><col class="v2-col-stb"><col class="v2-col-nine"><col class="v2-col-nine"></colgroup><thead><tr><th scope="col">Player</th><th scope="col">Gross</th><th scope="col">Stb</th><th scope="col">F9</th><th scope="col">B9</th></tr></thead><tbody>`+
+      rows.map(p=>`<tr tabindex="0" data-scorecard-player="${escape(p.player_id)}" aria-label="Open scorecard for ${escape(p.name)}; ${p.total.holes} recorded visible holes"><th scope="row"><span class="v2-table-name" title="${escape(p.name)}">${escape(p.name)}</span></th><td>${p.total.gross_incomplete?'<abbr title="Incomplete (BLOB)" aria-label="Gross incomplete due to BLOB">—</abbr>':p.total.gross}${p.total.partial?'*':''}</td><td class="v2-table-stb">${points(p.total)}</td><td>${points(p.front9)}</td><td>${points(p.back9)}</td></tr>`).join('')+'</tbody></table>';
+  }
+  renderLeaderboard=rows=>{leaderboard.innerHTML=leaderboardTable(rows);};
   let scorecardLoading=false;
   async function openPlayerScorecard(card) {
     if(scorecardLoading)return;

@@ -2,6 +2,33 @@
 const {chromium,webkit}=require('playwright'),fs=require('node:fs'),assert=require('node:assert/strict');
 const {harness}=require('./harness.cjs');
 const endpoint='https://script.google.com/macros/s/synthetic-test/exec';
+async function checkTableGeometry(page,count) {
+  const table=page.locator('.v2-leaderboard');
+  assert.deepEqual(await table.locator('thead th').allTextContents(),['Player','Gross','Stb','F9','B9']);
+  assert.equal(await table.locator('tbody tr').count(),count);
+  assert.equal(await page.locator('#leaderboardTable .v2-result').count(),0);
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false,'page horizontal overflow');
+  const measurements=await table.locator('tbody tr').evaluateAll(rows=>rows.map(row=>({
+    cells:row.children.length,height:row.getBoundingClientRect().height,
+    nameWidth:row.querySelector('.v2-table-name').clientWidth,
+    numbersFit:[...row.querySelectorAll('td')].every(cell=>{
+      const range=document.createRange();range.selectNodeContents(cell);
+      return range.getBoundingClientRect().width<=cell.clientWidth-4+1;
+    })
+  })));
+  assert.ok(measurements.every(r=>r.cells===5&&r.height>=44&&r.height<=52&&r.nameWidth>=100&&r.numbersFit),JSON.stringify(measurements));
+}
+async function checkLeaderboard(page,h,revealed) {
+  const rows=h.ctx.getLeaderboard('v2-event');await checkTableGeometry(page,rows.length);
+  for(const p of rows) {
+    const row=page.locator('[data-scorecard-player="'+p.player_id+'"]');
+    const value=s=>String(s.stableford)+(s.partial?'*':'');
+    assert.deepEqual(await row.locator('td').allTextContents(),[
+      (p.total.gross_incomplete?'—':String(p.total.gross))+(p.total.partial?'*':''),value(p.total),value(p.front9),value(p.back9)
+    ]);
+  }
+  assert.equal(rows[0].revealed,revealed);
+}
 async function scenario(browser,name,viewport){
   const h=harness(),context=await browser.newContext({viewport,isMobile:true,hasTouch:true,deviceScaleFactor:2});
   // Fixtures must follow creation order: the current V2 round is newer than the legacy round.
@@ -99,12 +126,13 @@ async function scenario(browser,name,viewport){
   h.sheets.get('Players').rows[1][1]='A Very Long Test Player Name For Narrow Screens';
   await page.evaluate(()=>showScreen('homeScreen'));
   await page.getByRole('button',{name:/Live Leaderboard/}).click();
-  await page.locator('#leaderboardTable').getByText('Back 9 · partial through hole 15',{exact:true}).first().waitFor();
-  assert.equal(await page.locator('#leaderboardTable .v2-result-name strong').first().evaluate(el=>getComputedStyle(el).whiteSpace),'nowrap');
+  await page.locator('#leaderboardTable').getByText(/B9 is partial through hole 15/).waitFor();
+  assert.equal(await page.locator('#leaderboardTable .v2-table-name').first().evaluate(el=>getComputedStyle(el).whiteSpace),'nowrap');
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
   assert.equal(await page.locator('#leaderboardTable').getByText('18-hole total',{exact:true}).count(),0);
+  await checkLeaderboard(page,h,false);
   // Tapping a player name opens only the backend's public physical-hole projection.
-  await page.locator('[data-scorecard-player="p1"] .v2-result-name strong').tap();
+  await page.locator('[data-scorecard-player="p1"] .v2-table-name').tap();
   let scorecard=page.locator('.v2-scorecard-dialog[open]');
   await scorecard.waitFor();
   assert.equal(await scorecard.locator('tbody tr').count(),15);
@@ -139,13 +167,14 @@ async function scenario(browser,name,viewport){
   await page.locator('#adminScreen.active').waitFor();
   await page.locator('#v2Reveal').click();
   await page.locator('#leaderboardScreen.active').waitFor();
-  await page.locator('#leaderboardTable').getByText('18-hole total',{exact:true}).first().waitFor();
-  assert.ok((await page.locator('#leaderboardTable').innerText()).includes('final results'));
-  assert.ok((await page.locator('#leaderboardTable').innerText()).includes('Incomplete (BLOB)'));
+  await page.locator('#leaderboardTable').getByText(/Final results/).waitFor();
+  assert.ok((await page.locator('#leaderboardTable').innerText()).includes('Final results'));
+  assert.ok(await page.locator('#leaderboardTable abbr[title="Incomplete (BLOB)"]').count()>0);
   assert.equal(h.ctx.v2Meta('v2-event').locked,true);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
-  // Card background taps open complete, immutable post-reveal scorecards.
-  await page.locator('[data-scorecard-player="p1"] .v2-split').first().tap();
+  await checkLeaderboard(page,h,true);
+  // Row cell taps open complete, immutable post-reveal scorecards.
+  await page.locator('[data-scorecard-player="p1"] td').first().tap();
   scorecard=page.locator('.v2-scorecard-dialog[open]');await scorecard.waitFor();
   assert.equal(await scorecard.locator('tbody tr').count(),18);
   assert.ok((await scorecard.innerText()).includes('Final scorecard'));
@@ -154,12 +183,20 @@ async function scenario(browser,name,viewport){
   assert.equal(await scorecard.evaluate(el=>el.scrollWidth>el.clientWidth+1),false);
   await scorecard.getByRole('button',{name:'Back to leaderboard',exact:true}).tap();
   await page.locator('#leaderboardScreen.active').waitFor();
-  assert.deepEqual(errors,[]);console.log('PASS '+name+': credential rejection, touch BLOB, corrections/reason/history, Finish/edit, layout');
+  // Stress long names and three-digit totals without clipping any numeric columns.
+  await page.evaluate(()=>renderLeaderboard(Array.from({length:12},(_,i)=>({
+    player_id:'stress-'+i,name:'An Exceptionally Long Player Name '+i,revealed:false,
+    total:{gross:123,stableford:123,holes:15,expected_holes:15,partial:true},
+    front9:{stableford:63,partial:false},back9:{stableford:60,partial:true}
+  }))));
+  await checkTableGeometry(page,12);
+  assert.deepEqual(await page.locator('.v2-leaderboard tbody tr').first().locator('td').allTextContents(),['123*','123*','63','60*']);
+  assert.deepEqual(errors,[]);console.log('PASS '+name+': credential rejection, touch BLOB, corrections/reason/history, Finish/edit, compact table and scorecard layout');
   await context.close();
 }
 (async()=>{
   const browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH||(fs.existsSync('/usr/bin/chromium')?'/usr/bin/chromium':chromium.executablePath()),headless:true,args:['--no-sandbox']});
-  try{for(const [name,size] of [['iPhone-sized Chromium',{width:390,height:844}],['Android-sized Chromium',{width:360,height:800}],['iPad-sized Chromium',{width:820,height:1180}]])await scenario(browser,name,size);}finally{await browser.close();}
+  try{for(const [name,size] of [['Small phone Chromium',{width:320,height:740}],['iPhone-sized Chromium',{width:390,height:844}],['Android-sized Chromium',{width:360,height:800}],['iPad-sized Chromium',{width:820,height:1180}]])await scenario(browser,name,size);}finally{await browser.close();}
   if(fs.existsSync(webkit.executablePath())){const safari=await webkit.launch({headless:true});try{await scenario(safari,'WebKit iPhone',{width:390,height:844});await scenario(safari,'WebKit iPad',{width:820,height:1180});}finally{await safari.close();}}
   else console.log('LIMITATION: WebKit runtime unavailable; physical Safari testing required.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

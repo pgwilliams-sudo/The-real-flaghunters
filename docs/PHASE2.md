@@ -8,7 +8,9 @@ Before an explicit admin reveal, physical holes **16–18** are excluded on the 
 
 Each leaderboard row includes Playing Handicap and `front9`, `back9`, and `total` projections. Each projection contains Gross, Stableford, saved-hole count, expected visible-hole count, `partial`, `through_hole`, and `gross_incomplete`. The `partial` flag also stays true for Back 9 and combined totals while holes 16–18 are withheld. Missing holes do not become zero-stroke scores: a subtotal is explicitly partial with its saved-hole count. A pickup makes that nine's Gross and the combined Gross `null` with `gross_incomplete: true`; the UI says **Incomplete (BLOB)**. Stableford continues to sum numeric points, including zero for a pickup. A numeric zero-point score retains its real Gross.
 
-Result cards keep player names on one line on iPad and phones, using ellipsis for names longer than the available width. The full name remains in the DOM text. Mobile split panels stack rather than forcing the page to scroll sideways.
+The leaderboard is a compact phone-first table with exactly one row per player and five columns: **Player, Gross, Stb, F9, B9**. Stb is combined visible Stableford; F9/B9 are Stableford for physical holes 1–9/10–18. Before reveal, Stb/Gross stop at 15 and B9 at 15, with an explicit partial notice. `*` marks partial totals/nines; Gross `—` means incomplete due to BLOB. Row ordering and all displayed numbers still come from the server projection. Playing Handicap and full Gross/Stableford splits remain available inside the scorecard.
+
+Player names stay on one line, using ellipsis only when necessary; the full name remains in DOM text and the name tooltip. Numeric columns use tabular digits and do not truncate. Every row is a touch target at least 44px high, with Enter/Space keyboard support. The table fits phone widths without horizontal scrolling. Scorecard and group-result split panels retain their existing layout.
 
 ## Privacy boundaries
 
@@ -34,12 +36,14 @@ Repeated reveal calls return the same final leaderboard without redrawing pairs 
 
 ## Player scorecards
 
-Tap a player's name or anywhere on their leaderboard card to open a read-only scorecard. Keyboard Enter/Space works too. It shows Playing Handicap, physical-hole Par and Stroke Index from the round's frozen course, Gross and Stableford, plus the same Front 9, Back 9 and combined projections as the leaderboard. An unplayed hole shows a dash; a pickup shows **BLOB**, no Gross, and zero Stableford. Numeric zero-point scores keep their actual Gross.
+Tap a player's name or anywhere on their leaderboard row to open a read-only scorecard. Keyboard Enter/Space works too. It shows Playing Handicap, physical-hole Par and Stroke Index from the round's frozen course, Gross and Stableford, plus the same Front 9, Back 9 and combined projections as the leaderboard. An unplayed hole shows a dash; a pickup shows **BLOB**, no Gross, and zero Stableford. Numeric zero-point scores keep their actual Gross.
 
 Public GET `scorecard` requires `eventId` and `playerId`. It returns only the player's display identity/handicap, filtered physical-hole rows, split summaries and visibility flags. Before reveal, rows end at hole 15 and `hidden_holes` lists 16–18 without their Par, Stroke Index, score, completion state, or audit metadata. Totals use the existing server-filtered projection; query flags or credentials attached to GET cannot override hiding. After admin reveal, all 18 rows and complete summaries are available. Unknown/missing player or round IDs fail without returning a scorecard.
 
-The dialog has a sticky **Back to leaderboard** button, a second Close button, and native Escape support. Closing restores keyboard focus to that player's card without navigating away or changing the leaderboard. The compact table fits iPhone/iPad widths; long names stay on one line. The view is read-only and does not change score revisions, credential sessions, history, or reveal locks.
+The dialog has a sticky **Back to leaderboard** button, a second Close button, and native Escape support. Closing restores keyboard focus to that player's row without navigating away or changing the leaderboard. The compact table fits iPhone/iPad widths; long names stay on one line. The view is read-only and does not change score revisions, credential sessions, history, or reveal locks.
 
-Automated coverage includes frozen course data, physical ordering with shotgun starts, partial/unplayed holes, pickup versus numeric zero points, cross-player isolation, hidden-hole response invariance, rejected override flags, and complete post-reveal scorecards. The mobile suite also opens cards by player name/card background, tests keyboard opening and closing, checks focus restoration, and verifies pre/post-reveal layouts without horizontal overflow.
+Automated coverage includes frozen course data, physical ordering with shotgun starts, partial/unplayed holes, pickup versus numeric zero points, cross-player isolation, hidden-hole response invariance, rejected override flags, and complete post-reveal scorecards. The mobile suite also opens scorecards by player name/row cell, tests keyboard opening and closing, checks focus restoration, and verifies pre/post-reveal layouts without horizontal overflow.
 
 For a new isolated iPad/Safari test with 12 synthetic players, use the [current setup and generator guide](TEST_GENERATOR.md).
+
+Table layout regressions cover 320px, 360px, 390px and tablet Chromium viewports, exact headers/row counts, long names, numeric overflow, partial markers, BLOB Gross, and row/name taps before and after reveal. WebKit iPhone/iPad scenarios run when that runtime is installed.
