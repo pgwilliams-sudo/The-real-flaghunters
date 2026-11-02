@@ -41,3 +41,5 @@ Public GET `scorecard` requires `eventId` and `playerId`. It returns only the pl
 The dialog has a sticky **Back to leaderboard** button, a second Close button, and native Escape support. Closing restores keyboard focus to that player's card without navigating away or changing the leaderboard. The compact table fits iPhone/iPad widths; long names stay on one line. The view is read-only and does not change score revisions, credential sessions, history, or reveal locks.
 
 Automated coverage includes frozen course data, physical ordering with shotgun starts, partial/unplayed holes, pickup versus numeric zero points, cross-player isolation, hidden-hole response invariance, rejected override flags, and complete post-reveal scorecards. The mobile suite also opens cards by player name/card background, tests keyboard opening and closing, checks focus restoration, and verifies pre/post-reveal layouts without horizontal overflow.
+
+For a new isolated iPad/Safari test with 12 synthetic players, use the [current setup and generator guide](TEST_GENERATOR.md).

@@ -4,6 +4,7 @@
   "devDependencies": {"playwright": "1.62.1"},
   "scripts": {
     "test": "node --test tests/*.test.cjs",
-    "test:mobile": "node tests/mobile.cjs"
+    "test:mobile": "node tests/mobile.cjs",
+    "package:backend": "node scripts/package-backend.cjs"
   }
 }
