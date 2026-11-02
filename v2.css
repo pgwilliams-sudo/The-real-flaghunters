@@ -1,0 +1,23 @@
+/* Touch targets and narrow layouts for Safari and Android browsers. */
+button, input, select, textarea { min-height: 44px; }
+input, select, textarea { font-size: 16px; }
+.v2-toolbar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:12px 0; }
+.v2-toolbar > * { flex:1 1 120px; min-width:0; }
+.v2-pickup { background:#ffe8ae; color:#342100; border:2px solid #906400; border-radius:10px; padding:12px; width:100%; margin:8px 0; font-weight:700; }
+.v2-pickup[aria-pressed=true] { background:#694900; color:white; }
+.v2-reason { width:100%; box-sizing:border-box; margin:8px 0; }
+.v2-note { font-size:14px; line-height:1.5; }
+.v2-connection { max-width:600px; margin:12px auto; padding:16px; border:2px solid #826000; background:#fff9e8; color:#222; border-radius:12px; }
+.v2-connection input { width:100%; box-sizing:border-box; margin:8px 0; }
+.v2-credentials { overflow-wrap:anywhere; }
+dialog { border:0; border-radius:14px; max-width:560px; width:calc(100% - 48px); max-height:85dvh; overflow:auto; color:#172419; }
+dialog::backdrop { background:#0009; }
+dialog input, dialog textarea { width:100%; box-sizing:border-box; margin:10px 0; }
+.v2-history-entry { border-bottom:1px solid #ccc; padding:12px 0; overflow-wrap:anywhere; }
+.v2-locked { background:#fff1d6; padding:12px; border-radius:8px; }
+@media(max-width:430px) {
+  .score-player { padding:12px; }
+  .v2-toolbar > * { flex-basis:100px; }
+  .quick-scores { gap:5px; }
+  .v2-toolbar button { white-space:normal; }
+}

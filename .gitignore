@@ -1,0 +1,7 @@
+node_modules/
+work/
+test-results/
+playwright-report/
+.env*
+.clasprc.json
+npm-debug.log*

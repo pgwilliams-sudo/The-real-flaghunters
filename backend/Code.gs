@@ -8,7 +8,7 @@ const SPREADSHEET_ID = 'REPLACE_WITH_SPREADSHEET_ID';
 
 const ADMIN_PIN = 'REPLACE_WITH_ADMIN_PIN';
 
-function doGet(e) {
+function legacyDoGet(e) {
   try {
     const p = (e && e.parameter) || {};
     const action = p.action || 'status';
@@ -81,7 +81,7 @@ function doGet(e) {
   }
 }
 
-function doPost(e) {
+function legacyDoPost(e) {
   try {
     const data = JSON.parse(
       (e && e.postData && e.postData.contents) || '{}'
@@ -150,7 +150,9 @@ function requireAdmin(pin) {
 }
 
 function getSpreadsheet() {
-  return SpreadsheetApp.openById(SPREADSHEET_ID);
+  const id = PropertiesService.getScriptProperties().getProperty('V2_SPREADSHEET_ID') || SPREADSHEET_ID;
+  if (id === 'REPLACE_WITH_SPREADSHEET_ID') throw new Error('Configure a separate test spreadsheet first');
+  return SpreadsheetApp.openById(id);
 }
 
 function sheetNamed(name) {
@@ -178,7 +180,7 @@ function getCourseHole(courseName, tee, hole) {
   ) || null;
 }
 
-function getCurrentEvent() {
+function legacyGetCurrentEvent() {
   const rows = getRowsAsObjects(sheetNamed('Events'));
   if (!rows.length) return null;
 
@@ -220,7 +222,7 @@ function createEvent(data) {
     'event-' +
     Utilities.formatDate(
       new Date(), tz, 'yyyyMMdd-HHmmss'
-    );
+    ) + '-' + Utilities.getUuid().slice(0,8);
 
   const date =
     data.date ||
@@ -243,7 +245,7 @@ function createEvent(data) {
   };
 }
 
-function getGroups(eventId) {
+function legacyGetGroups(eventId) {
   if (!eventId) return [];
 
   const rows = getRowsAsObjects(sheetNamed('Groups'))
@@ -377,7 +379,7 @@ function validateHandicapIndex(value) {
   return value;
 }
 
-function getTeeData(event) {
+function legacyGetTeeData(event) {
   const holes = getCourse().filter(r =>
     String(r.course) === String(event.course) &&
     String(r.tee) === String(event.tee)
@@ -443,6 +445,8 @@ function withScriptLock(fn) {
 function saveGroups(data) {
   return withScriptLock(() => {
     const eventId = String(data.eventId || '');
+    v2Writable(eventId);
+    v2RecheckActor(data._v2Actor);
     const groups = data.groups || [];
 
     if (!eventId)
@@ -513,6 +517,7 @@ function saveGroups(data) {
       8
     ).setValues(rows);
 
+    v2AfterGroupSave(eventId);
     return {
       ok: true,
       saved: rows.length
@@ -523,6 +528,8 @@ function saveGroups(data) {
 function confirmGroupHandicaps(data) {
   return withScriptLock(() => {
     const eventId = String(data.eventId || '');
+    v2Writable(eventId);
+    v2RecheckActor(data._v2Actor);
     const groupNo = Number(data.groupNo);
 
     if (
@@ -646,7 +653,7 @@ function confirmGroupHandicaps(data) {
   });
 }
 
-function getScores(eventId) {
+function legacyGetScores(eventId) {
   if (!eventId) return [];
 
   return getRowsAsObjects(sheetNamed('Scores'))
@@ -772,6 +779,8 @@ function saveScore(data) {
 function saveHoleScores(data) {
   return withScriptLock(() => {
     const eventId = String(data.eventId || '');
+    v2Writable(eventId);
+    v2RecheckActor(data._v2Actor);
     const hole = Number(data.hole);
     const incoming = data.scores;
 
@@ -911,6 +920,8 @@ const event = requireEditableEvent(eventId);
 function completeGroup(data) {
   return withScriptLock(function () {
     const eventId = String(data.eventId || '');
+    v2Writable(eventId);
+    v2RecheckActor(data._v2Actor);
     const groupNo = Number(data.groupNo);
 
     requireEditableEvent(eventId);
@@ -1070,6 +1081,7 @@ function getLeaderboard(eventId) {
     const p = totals[String(s.player_id)];
     if (!p) return;
 
+    if (s.score_status === 'pickup') p.gross_incomplete = p.net_incomplete = true;
     p.gross += Number(s.gross) || 0;
     p.net += Number(s.net) || 0;
     p.stableford += Number(s.stableford) || 0;
@@ -1097,8 +1109,7 @@ function getSeasonStats() {
   const groups =
     getRowsAsObjects(sheetNamed('Groups'));
 
-  const scores =
-    getRowsAsObjects(sheetNamed('Scores'));
+  const scores = events.flatMap(event => getScores(String(event.event_id)));
 
   const playerMap = {};
 
@@ -1391,21 +1402,8 @@ function competitionJson(value, fallback) {
 
 
 function competitionRecord(eventId) {
-  const sheet = competitionSheet();
-
-  if (sheet.getMaxColumns() < 7) {
-    sheet.insertColumnsAfter(
-      sheet.getMaxColumns(),
-      7 - sheet.getMaxColumns()
-    );
-  }
-
-  sheet.getRange(1, 6, 1, 2).setValues([[
-    'blind_enabled',
-    'team234_enabled'
-  ]]);
-
-  const values = sheet.getDataRange().getValues();
+  const sheet = getSpreadsheet().getSheetByName('Competitions');
+  const values = sheet ? sheet.getDataRange().getValues() : [];
 
   for (let i = 1; i < values.length; i++) {
     if (String(values[i][0]) === String(eventId)) {
@@ -1436,6 +1434,10 @@ function competitionRecord(eventId) {
 
 function saveCompetitionRecord(eventId, record) {
   const sheet = competitionSheet();
+  if (sheet.getMaxColumns() < 7) sheet.insertColumnsAfter(sheet.getMaxColumns(), 7 - sheet.getMaxColumns());
+  const extra = sheet.getRange(1,6,1,2).getValues()[0];
+  if ((extra[0] && extra[0] !== 'blind_enabled') || (extra[1] && extra[1] !== 'team234_enabled')) throw new Error('Unexpected competition columns');
+  sheet.getRange(1,6,1,2).setValues([['blind_enabled','team234_enabled']]);
 
   const values = [
     eventId,
@@ -1461,9 +1463,9 @@ function saveCompetitionRecord(eventId, record) {
 
 
 function getPinAcknowledgements(eventId) {
-  const rows = getRowsAsObjects(
-    pinHistorySheet()
-  ).filter(r =>
+  const sheet = getSpreadsheet().getSheetByName('PinHistory');
+  if (!sheet) return {};
+  const rows = getRowsAsObjects(sheet).filter(r =>
     String(r.event_id) === String(eventId)
   );
 
@@ -1531,7 +1533,8 @@ function competitionResponse(eventId) {
 }
 
 function competitionPar3Holes(event) {
-  return getCourse()
+  const meta=v2Meta(event.event_id);
+  return (meta ? v2Course(meta) : getCourse())
     .filter(h =>
       String(h.course) === String(event.course) &&
       String(h.tee) === String(event.tee) &&
@@ -1543,6 +1546,8 @@ function competitionPar3Holes(event) {
 function saveCompetitionSetup(data) {
   return withScriptLock(function () {
     const eventId = String(data.eventId || '');
+    v2Writable(eventId);
+    v2RecheckActor(data._v2Actor);
     const event = requireActiveEvent(eventId);
 if (getScores(eventId).length > 0) {
   throw new Error(
@@ -1686,6 +1691,8 @@ function saveNearestPins(data) {
 function drawBlindPairs(data) {
   return withScriptLock(function () {
     const eventId = String(data.eventId || '');
+    v2Writable(eventId);
+    v2RecheckActor(data._v2Actor);
     const event = getEventById(eventId);
 
     if (!event) {
@@ -1796,6 +1803,8 @@ function pinHistorySheet() {
 function updatePinLeader(data) {
   return withScriptLock(function () {
     const eventId = String(data.eventId || '');
+    v2Writable(eventId);
+    v2RecheckActor(data._v2Actor);
     const hole = Number(data.hole);
     const groupNo = Number(data.groupNo);
     const playerId = String(data.playerId || '');
@@ -1922,7 +1931,9 @@ function groupStatusSheet() {
 function getGroupStatus(eventId) {
   if (!eventId) return [];
 
-  return getRowsAsObjects(groupStatusSheet())
+  const sheet = getSpreadsheet().getSheetByName('GroupStatus');
+  if (!sheet) return [];
+  return getRowsAsObjects(sheet)
     .filter(r =>
       String(r.event_id) === String(eventId)
     )
@@ -1975,6 +1986,8 @@ function allGroupsFinished(eventId) {
 function correctPinWinner(data) {
   return withScriptLock(function () {
     const eventId = String(data.eventId || '');
+    v2Writable(eventId);
+    v2RecheckActor(data._v2Actor);
     const hole = Number(data.hole);
     const playerId = String(data.playerId || '');
     const reason = String(data.reason || '').trim();
@@ -2055,4 +2068,3 @@ function correctPinWinner(data) {
     };
   });
 }
-

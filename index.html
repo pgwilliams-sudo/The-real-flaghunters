@@ -573,6 +573,7 @@
 
   </style>
 
+<link rel="stylesheet" href="v2.css">
 </head>
 
 
@@ -949,13 +950,12 @@
       <div class="field">
 
         <label>
-          Admin PIN
+          Admin secret
         </label>
 
         <input
           id="adminPin"
           type="password"
-          inputmode="numeric"
           autocomplete="off"
         >
 
@@ -1265,8 +1265,7 @@ WHS Handicap Index. Use + for plus handicaps.
 
 <script>
 
-const API_URL =
-  'https://script.google.com/macros/s/AKfycbwIF6kDgwcYkhc_HpvrorPLvJRv21f9sm8yyzng_mSU1SWunT9BTGGLv1JdbJImnXYLXg/exec';
+const API_URL = localStorage.getItem('flaghunters.v2.api') || '';
 
 
 let currentEvent = null;
@@ -3221,11 +3220,11 @@ function renderLeaderboard(
           </td>
 
           <td>
-            ${row.gross || 0}
+            ${row.gross_incomplete ? '—' : (row.gross || 0)}
           </td>
 
           <td>
-            ${row.net || 0}
+            ${row.net_incomplete ? '—' : (row.net || 0)}
           </td>
 
           <td
@@ -3387,8 +3386,7 @@ async function adminLogin() {
     }
 
 
-    adminPinValue =
-      pin;
+    adminPinValue = 'authenticated';
 
 
     document
@@ -4740,7 +4738,7 @@ function cssEscape(value) {
 
 
 
-initialise();
+// V2 adapter starts only after all interface functions have loaded.
 
 </script>
 
@@ -5137,16 +5135,8 @@ function render() {
   }
 
   function organizerPin() {
-    if (competitionPin) return competitionPin;
-
-    const entered = prompt('Enter organizer PIN');
-
-    if (entered === null) {
-      throw new Error('Cancelled');
-    }
-
-    competitionPin = entered;
-    return entered;
+    if(!adminPinValue) throw new Error('Sign in through Admin Setup first.');
+    return 'authenticated';
   }
 
   async function post(action, details) {
@@ -6061,6 +6051,7 @@ async function saveAdminPinCorrection() {
 </script>
 
   
+<script src="v2.js"></script>
 </body>
 
 </html>
