@@ -4,10 +4,40 @@
   const SCOPE='/offline-feasibility/',WORKER='/offline-probe-sw.js';
   const DB='flaghunters-stage1-feasibility',CACHE='flaghunters-stage1-feasibility-v1';
   let busy=false;
-  const report={stage:1,diagnostic_version:1,secure_context:isSecureContext,service_worker_api:'serviceWorker' in navigator,
+  const report={stage:1,diagnostic_version:2,secure_context:isSecureContext,service_worker_api:'serviceWorker' in navigator,
     indexeddb_api:'indexedDB' in window,cache_api:'caches' in window,user_agent:navigator.userAgent,checks:[]};
   const state=document.getElementById('state'),output=document.getElementById('report');
   function render(message) {state.textContent=message;report.online_hint=navigator.onLine;report.controller=navigator.serviceWorker?.controller?.scriptURL||null;output.textContent=JSON.stringify(report,null,2);}
+  function trace(phase,details={}) {report.checks.push({phase,...details,at:new Date().toISOString()});render(state.textContent);}
+  navigator.serviceWorker?.addEventListener('message',event=>{
+    if(event.data?.type==='v2-stage1-worker'&&event.source&&new URL(event.source.scriptURL).pathname===WORKER) {
+      const {type,...details}=event.data;trace('worker-message',details);
+    }
+  });
+  document.addEventListener('securitypolicyviolation',event=>{
+    let blocked=event.blockedURI;try{const url=new URL(blocked,location.href);blocked=url.origin+url.pathname;}catch(_){}
+    trace('csp-violation',{directive:event.effectiveDirective,blocked_uri:blocked});
+  });
+  async function waitForWorker(registration) {
+    return new Promise((resolve,reject)=>{
+      const watched=new Set();let finished=false,poll,timeout;
+      const end=error=>{if(finished)return;finished=true;clearInterval(poll);clearTimeout(timeout);registration.removeEventListener('updatefound',check);error?reject(error):resolve();};
+      function check() {
+        if(finished)return;
+        for(const worker of [registration.installing,registration.waiting,registration.active])if(worker&&!watched.has(worker)) {
+          watched.add(worker);trace('worker-observed',{state:worker.state,script:new URL(worker.scriptURL).pathname});
+          worker.addEventListener('statechange',()=>{trace('worker-state',{state:worker.state});check();});
+          worker.addEventListener('error',()=>trace('worker-error',{state:worker.state}));
+        }
+        if(registration.active?.state==='activated')return end();
+        if([...watched].some(worker=>worker.state==='redundant')&&!registration.installing&&!registration.waiting)return end(Error('Worker installation failed; inspect worker messages and lifecycle states below'));
+      }
+      registration.addEventListener('updatefound',check);
+      poll=setInterval(check,250);
+      timeout=setTimeout(()=>end(Error('Worker activation timed out; inspect the recorded registration/lifecycle and worker messages')),30000);
+      check();
+    });
+  }
   function database() {return new Promise((resolve,reject)=>{
     const request=indexedDB.open(DB,1);request.onupgradeneeded=()=>request.result.createObjectStore('dummy');
     request.onerror=()=>reject(request.error);request.onblocked=()=>reject(Error('Dummy database blocked by another tab'));request.onsuccess=()=>resolve(request.result);
@@ -35,13 +65,16 @@
     const response=await fetch(WORKER,{cache:'no-store',redirect:'error',credentials:'same-origin'});
     report.worker_response={status:response.status,type:response.headers.get('content-type'),allowed_scope:response.headers.get('service-worker-allowed'),csp:response.headers.get('content-security-policy'),cache_control:response.headers.get('cache-control')};
     if(!response.ok||response.redirected||!/javascript/.test(report.worker_response.type||''))throw Error('Private host did not serve the worker as JavaScript');
+    for(const path of [SCOPE+'index.html',SCOPE+'probe.js']) {
+      const asset=await fetch(path,{cache:'no-store',redirect:'error',credentials:'same-origin'});
+      trace('page-asset-preflight',{path,status:asset.status,content_type:asset.headers.get('content-type')});
+      if(!asset.ok)throw Error('Page-context asset fetch failed: '+path+' ('+asset.status+')');
+    }
     const existing=await navigator.serviceWorker.getRegistration(SCOPE);
     if(existing&&new URL(existing.scope).pathname===SCOPE&&new URL((existing.active||existing.waiting||existing.installing).scriptURL).pathname!==WORKER)throw Error('Another worker owns the diagnostic scope; refusing to replace it');
     const registration=await navigator.serviceWorker.register(WORKER,{scope:SCOPE,updateViaCache:'none'});
-    await Promise.race([new Promise((resolve,reject)=>{
-      function check() {if(registration.active?.state==='activated')return resolve();const worker=registration.installing||registration.waiting||registration.active;if(worker?.state==='redundant')return reject(Error('Worker installation rejected'));worker?.addEventListener('statechange',check,{once:true});}
-      check();
-    }),new Promise((_,reject)=>setTimeout(()=>reject(Error('Worker activation timed out; review host/auth/CSP restrictions')),20000))]);
+    trace('registration-returned',{scope:registration.scope,installing:registration.installing?.state||null,waiting:registration.waiting?.state||null,active:registration.active?.state||null});
+    await waitForWorker(registration);
     await marker(true);await inspect('prepared online');render('Prepared. Reload this page online once; then follow the offline checks below.');
   });
   document.getElementById('check').onclick=()=>run(()=>inspect('manual check'));

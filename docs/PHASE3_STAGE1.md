@@ -1,6 +1,6 @@
 # Phase 3 Stage 1: private-host and physical Safari feasibility
 
-Status: **in progress; physical Safari offline acceptance has not been performed. Stage 2 has not started.**
+Status: **in progress; physical Safari preparation has failed; offline acceptance is blocked pending diagnosis. Stage 2 has not started.**
 
 ## Confirmed by inspection
 
@@ -39,3 +39,11 @@ The mobile page reports secure context/API availability, worker response MIME/CS
 ## Automated checks
 
 `tests/offline-feasibility.test.cjs` validates diagnostic parsing, narrow scope/asset allowlists, rejection of login/fallback content, and no interception of app/sign-in/backend requests. These unit tests cannot validate the actual host CSP, owner authentication path or a physical Safari offline restart. Report those as pending until observed.
+
+## First physical Safari observation and diagnostic v2
+
+On 2026-11-02 the owner opened the protected diagnostic in iPad Safari. The report showed secure context and Service Worker/IndexedDB/Cache APIs available; normal page fetch of the worker returned HTTP 200 with `text/javascript`. No Service-Worker-Allowed or CSP response header was visible on that fetch (absence alone is not a restriction). Preparation timed out, and subsequent checks showed no registered active worker, no controller, no dummy marker and no cached assets. Private-page loading works in the existing signed-in session; a signed-out access-denial test has not yet been performed. These observations do not establish whether Safari, host authorization during worker requests, CSP, or installation code caused the failure. Do not label Stage 1 passed.
+
+The original diagnostic also lacked a reliable failure trace: it could miss a worker becoming redundant and report only a generic timeout. Diagnostic v2 records registration/updatefound/state changes, worker-side asset status/type and installation errors, page-side asset preflights and CSP events. Worker messages are restricted to diagnostic clients and no cookies, credentials or response bodies enter the report. Scope and cache allowlists are unchanged.
+
+`npm run test:offline-feasibility` uses a LOCAL HTTP protected fixture, not the real Site: Chromium successfully installs, reloads offline, reopens a tab offline with its marker, excludes an app-root control page from the worker, and cleans up only diagnostic storage. A simulated worker-context-only 403 produces an explicit traced install failure. WebKit is run if installed; local Chromium success does not prove actual private Sites/Safari compatibility. Physical preparation must be retried using diagnostic v2 before any offline action or Stage 2.

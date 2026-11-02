@@ -5,6 +5,7 @@
   "scripts": {
     "test": "node --test tests/*.test.cjs",
     "test:mobile": "node tests/mobile.cjs",
+    "test:offline-feasibility": "node tests/offline-feasibility.browser.cjs",
     "package:backend": "node scripts/package-backend.cjs"
   }
 }
