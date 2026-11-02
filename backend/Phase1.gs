@@ -257,6 +257,7 @@ function doGet(e) {
   try {
     const p=(e&&e.parameter)||{},action=p.action||'status',eventId=String(p.eventId||'');
     if(action==='status') return jsonResponse({ok:true,app:'The Real Flag Hunters',version:'2-phase2',api_generation:'v2-phase1',message:'V2 test backend'});
+    if(action==='scorecard') return jsonResponse({ok:true,scorecard:v2Scorecard(eventId,String(p.playerId||''))});
     if(action==='scores') return jsonResponse({ok:true,scores:v2PublicScores(eventId)});
     if(action==='leaderboard') return jsonResponse({ok:true,leaderboard:getLeaderboard(eventId),revealed:v2ResultsRevealed(eventId)});
     if(action==='competitions') return jsonResponse({ok:true,...v2PublicCompetitions(eventId)});
@@ -453,4 +454,25 @@ function v2RevealResults(data,actor) {
     SpreadsheetApp.flush();
     return {ok:true,revealed:true,leaderboard:getLeaderboard(eventId)};
   });
+}
+
+// Public scorecards use the same filtered scores and summaries as the leaderboard.
+function v2Scorecard(eventId,playerId) {
+  if(!eventId||!playerId) throw new Error('Event and player are required');
+  const player=v2Leaderboard(eventId).find(p=>String(p.player_id)===playerId);
+  if(!player) throw new Error('Player not found in this round');
+  const meta=v2Meta(eventId),event=getEventById(eventId);
+  const course=meta?v2Course(meta):getCourse().filter(h=>String(h.course)===String(event.course)&&String(h.tee)===String(event.tee));
+  const scores=v2PublicScores(eventId).filter(s=>String(s.player_id)===playerId);
+  const last=player.revealed?18:15;
+  const holes=Array.from({length:last},(_,i)=>{
+    const hole=i+1,c=course.find(h=>Number(h.hole)===hole),score=scores.find(s=>Number(s.hole)===hole);
+    return {hole,par:c?Number(c.par):null,stroke_index:c?Number(c.stroke_index):null,
+      status:score?(score.score_status==='pickup'?'pickup':'scored'):'unplayed',
+      gross:score&&score.score_status!=='pickup'?Number(score.gross):null,
+      stableford:score?Number(score.stableford):null};
+  });
+  return {player_id:player.player_id,name:player.name,playing_handicap:player.playing_handicap,
+    revealed:player.revealed,front9:player.front9,back9:player.back9,total:player.total,holes,
+    hidden_holes:player.revealed?[]:[16,17,18]};
 }

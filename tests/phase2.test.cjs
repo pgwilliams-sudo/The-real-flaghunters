@@ -120,3 +120,56 @@ test('final ranking may change only after reveal exposes the last three holes',(
   finish(h);reveal(h);
   assert.ok(ids().indexOf('p5')<ids().indexOf('p1'));
 });
+
+test('scorecard returns physical holes, frozen course data, Playing Handicap and matching visible splits',()=>{
+  const h=harness();h.sheets.get('Groups').rows.slice(1).forEach(r=>r[5]=13);
+  score(h,13,[1],5);score(h,1,[1],4);score(h,3,[1],3);
+  h.sheets.get('Course').rows[1][3]=5;
+  const card=get(h,'scorecard',{playerId:'p1'}).scorecard;
+  assert.equal(card.playing_handicap,1);assert.equal(card.holes.length,15);
+  assert.deepEqual(Array.from(card.holes,h=>h.hole),Array.from({length:15},(_,i)=>i+1));
+  assert.equal(card.holes[0].par,4);assert.equal(card.holes[0].stroke_index,1);
+  assert.equal(card.holes[0].gross,4);assert.equal(card.holes[0].stableford,3);
+  assert.equal(card.holes[2].par,3);assert.equal(card.holes[12].gross,5);
+  assert.equal(card.holes[1].status,'unplayed');assert.equal(card.holes[1].gross,null);assert.equal(card.holes[1].stableford,null);
+  const board=get(h,'leaderboard').leaderboard.find(p=>p.player_id==='p1');
+  for(const key of ['front9','back9','total'])assert.deepEqual(card[key],board[key]);
+  assert.equal(card.front9.gross,7);assert.equal(card.front9.stableford,5);
+  assert.equal(card.back9.gross,5);assert.equal(card.back9.stableford,1);assert.equal(card.total.gross,12);
+});
+
+test('scorecard server response cannot disclose hidden holes through details, aggregates or query flags',()=>{
+  const h=harness();score(h,1,[1],4);
+  const before=get(h,'scorecard',{playerId:'p1'});
+  score(h,16,[1],1);score(h,17,[1],null);score(h,18,[1],20);
+  assert.deepEqual(get(h,'scorecard',{playerId:'p1'}),before);
+  assert.deepEqual(get(h,'scorecard',{playerId:'p1',revealed:'true',includeHidden:'true',hole:'18',credential:h.admin}),before);
+  assert.deepEqual(Array.from(before.scorecard.hidden_holes),[16,17,18]);
+  assert.ok(before.scorecard.holes.every(h=>h.hole<=15));
+  assert.equal(before.scorecard.total.through_hole,15);assert.equal(before.scorecard.back9.gross_incomplete,false);
+  assert.doesNotMatch(JSON.stringify(before),/operation_id|revision|credential_id|snapshot_id/);
+  assert.equal(get(h,'scorecard',{playerId:'missing'}).ok,false);
+  assert.equal(get(h,'scorecard',{playerId:'p1',eventId:'missing'}).ok,false);
+  assert.equal(get(h,'scorecard').ok,false);
+});
+
+test('scorecard BLOBs have no Gross; numeric zero points keep Gross and other players stay separate',()=>{
+  const h=harness();score(h,2,[1],null);score(h,10,[1],12);score(h,2,[5],1);
+  const card=get(h,'scorecard',{playerId:'p1'}).scorecard;
+  assert.equal(card.holes[1].status,'pickup');assert.equal(card.holes[1].gross,null);assert.equal(card.holes[1].stableford,0);
+  assert.equal(card.holes[9].status,'scored');assert.equal(card.holes[9].gross,12);assert.equal(card.holes[9].stableford,0);
+  assert.equal(card.front9.gross,null);assert.equal(card.front9.gross_incomplete,true);
+  assert.equal(card.back9.gross,12);assert.equal(card.total.gross,null);assert.equal(card.total.stableford,0);
+});
+
+test('real admin reveal exposes a complete scorecard including hidden pickups and locks corrections',()=>{
+  const h=harness();for(let hole=1;hole<=18;hole++)score(h,hole,undefined,hole===17?null:4);
+  finish(h);const before=get(h,'scorecard',{playerId:'p1'}).scorecard;
+  assert.equal(before.back9.gross,24);assert.equal(before.total.gross,60);assert.equal(before.holes.length,15);
+  reveal(h);const final=get(h,'scorecard',{playerId:'p1'}).scorecard;
+  assert.equal(final.revealed,true);assert.equal(final.holes.length,18);assert.equal(final.hidden_holes.length,0);
+  assert.equal(final.holes[16].status,'pickup');assert.equal(final.holes[16].gross,null);
+  assert.equal(final.front9.gross,36);assert.equal(final.back9.gross,null);assert.equal(final.total.gross,null);
+  assert.equal(final.total.stableford,34);assert.equal(final.total.partial,false);
+  assert.match(h.save({hole:17,scores:[{playerId:'p1',status:'scored',gross:4,expectedRevision:1,reason:'Too late'}]}).error,/locked/);
+});

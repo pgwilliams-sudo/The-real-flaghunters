@@ -31,3 +31,13 @@ Repeated reveal calls return the same final leaderboard without redrawing pairs 
 `npm test` runs all backend regressions plus Phase 2 tests for physical splits, shotgun order, partial rounds, pickups versus numeric zero points, hidden-hole response invariance, cross-group access, public competition/season privacy, final reveal, pending-operation recovery and permanent locks.
 
 `npm run test:mobile` runs the real frontend against intercepted synthetic API responses at phone/tablet sizes, including partial split labels, single-line names, no page overflow, and the admin final-reveal interaction. It does not exercise a live Google deployment. WebKit/physical Safari and physical Android verification must be reported separately from Chromium emulation.
+
+## Player scorecards
+
+Tap a player's name or anywhere on their leaderboard card to open a read-only scorecard. Keyboard Enter/Space works too. It shows Playing Handicap, physical-hole Par and Stroke Index from the round's frozen course, Gross and Stableford, plus the same Front 9, Back 9 and combined projections as the leaderboard. An unplayed hole shows a dash; a pickup shows **BLOB**, no Gross, and zero Stableford. Numeric zero-point scores keep their actual Gross.
+
+Public GET `scorecard` requires `eventId` and `playerId`. It returns only the player's display identity/handicap, filtered physical-hole rows, split summaries and visibility flags. Before reveal, rows end at hole 15 and `hidden_holes` lists 16–18 without their Par, Stroke Index, score, completion state, or audit metadata. Totals use the existing server-filtered projection; query flags or credentials attached to GET cannot override hiding. After admin reveal, all 18 rows and complete summaries are available. Unknown/missing player or round IDs fail without returning a scorecard.
+
+The dialog has a sticky **Back to leaderboard** button, a second Close button, and native Escape support. Closing restores keyboard focus to that player's card without navigating away or changing the leaderboard. The compact table fits iPhone/iPad widths; long names stay on one line. The view is read-only and does not change score revisions, credential sessions, history, or reveal locks.
+
+Automated coverage includes frozen course data, physical ordering with shotgun starts, partial/unplayed holes, pickup versus numeric zero points, cross-player isolation, hidden-hole response invariance, rejected override flags, and complete post-reveal scorecards. The mobile suite also opens cards by player name/card background, tests keyboard opening and closing, checks focus restoration, and verifies pre/post-reveal layouts without horizontal overflow.

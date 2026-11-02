@@ -103,6 +103,25 @@ async function scenario(browser,name,viewport){
   assert.equal(await page.locator('#leaderboardTable .v2-result-name strong').first().evaluate(el=>getComputedStyle(el).whiteSpace),'nowrap');
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
   assert.equal(await page.locator('#leaderboardTable').getByText('18-hole total',{exact:true}).count(),0);
+  // Tapping a player name opens only the backend's public physical-hole projection.
+  await page.locator('[data-scorecard-player="p1"] .v2-result-name strong').tap();
+  let scorecard=page.locator('.v2-scorecard-dialog[open]');
+  await scorecard.waitFor();
+  assert.equal(await scorecard.locator('tbody tr').count(),15);
+  assert.equal(await scorecard.locator('[data-hole="18"]').count(),0);
+  assert.ok((await scorecard.innerText()).includes('Playing Handicap 1'));
+  assert.ok((await scorecard.innerText()).includes('BLOB'));
+  assert.ok((await scorecard.innerText()).includes('partial through hole 15'));
+  assert.equal(await scorecard.evaluate(el=>el.scrollWidth>el.clientWidth+1),false,'scorecard overflow');
+  assert.equal(await scorecard.locator('.v2-scorecard-name').evaluate(el=>getComputedStyle(el).whiteSpace),'nowrap');
+  await scorecard.getByRole('button',{name:'Back to leaderboard',exact:true}).tap();
+  assert.equal(await page.locator('.v2-scorecard-dialog[open]').count(),0);
+  assert.equal(await page.locator('[data-scorecard-player="p1"]').evaluate(el=>document.activeElement===el),true);
+  // Keyboard access is equivalent to tapping the card, and Escape returns to the board.
+  await page.locator('[data-scorecard-player="p1"]').press('Enter');
+  await page.locator('.v2-scorecard-dialog[open]').waitFor();
+  await page.keyboard.press('Escape');
+  assert.equal(await page.locator('.v2-scorecard-dialog[open]').count(),0);
   // Complete synthetic scores through the real backend, then reveal through admin UI.
   for(let hole=1;hole<=18;hole++) {
     const saved=h.ctx.getScores('v2-event');
@@ -125,6 +144,16 @@ async function scenario(browser,name,viewport){
   assert.ok((await page.locator('#leaderboardTable').innerText()).includes('Incomplete (BLOB)'));
   assert.equal(h.ctx.v2Meta('v2-event').locked,true);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
+  // Card background taps open complete, immutable post-reveal scorecards.
+  await page.locator('[data-scorecard-player="p1"] .v2-split').first().tap();
+  scorecard=page.locator('.v2-scorecard-dialog[open]');await scorecard.waitFor();
+  assert.equal(await scorecard.locator('tbody tr').count(),18);
+  assert.ok((await scorecard.innerText()).includes('Final scorecard'));
+  assert.ok((await scorecard.innerText()).includes('18-hole total'));
+  assert.ok((await scorecard.innerText()).includes('Incomplete (BLOB)'));
+  assert.equal(await scorecard.evaluate(el=>el.scrollWidth>el.clientWidth+1),false);
+  await scorecard.getByRole('button',{name:'Back to leaderboard',exact:true}).tap();
+  await page.locator('#leaderboardScreen.active').waitFor();
   assert.deepEqual(errors,[]);console.log('PASS '+name+': credential rejection, touch BLOB, corrections/reason/history, Finish/edit, layout');
   await context.close();
 }

@@ -63,17 +63,45 @@
       await originalSelect(groupNo);
     } catch(err) { alert(err.message); }
   };
-  function splitMarkup(rows) {
+  function resultSplits(p) {
+    return '<div class="v2-splits">'+
+      [['Front 9 · holes 1–9','front9'],[p.revealed?'Back 9 · holes 10–18':'Back 9 · partial through hole 15','back9'],[p.revealed?'18-hole total':'Partial total · holes 1–15','total']].map(([title,key])=>{
+        const split=p[key],gross=split.gross_incomplete?'Incomplete (BLOB)':String(split.gross);
+        return `<section class="v2-split"><strong>${title}</strong><div class="v2-split-values"><span>Gross <b>${gross}</b></span><span>Stableford <b>${split.stableford}</b></span></div><small>${split.holes}/${split.expected_holes} holes${split.partial?' · partial':''}</small></section>`;
+      }).join('')+'</div>';
+  }
+  function splitMarkup(rows,clickable=false) {
     if(!rows.length)return '<p>No players yet.</p>';
     const revealed=rows[0].revealed;
-    const gross=s=>s.gross_incomplete?'Incomplete (BLOB)':String(s.gross);
     return `<p class="message info">${revealed?'Clubhouse reveal · final results. All scores are locked.':'Live partial results · holes 16–18 hidden until admin reveal. Rankings use visible holes only.'}</p>`+
-      rows.map((p,i)=>`<article class="v2-result"><div class="v2-result-name"><strong>${i+1}. ${escape(p.name)}</strong><span>Playing Handicap ${Number(p.playing_handicap)}</span></div><div class="v2-splits">`+
-        [['Front 9 · holes 1–9','front9'],[revealed?'Back 9 · holes 10–18':'Back 9 · partial through hole 15','back9'],[revealed?'18-hole total':'Partial total · holes 1–15','total']].map(([title,key])=>{
-          const split=p[key];return `<section class="v2-split"><strong>${title}</strong><div class="v2-split-values"><span>Gross <b>${gross(split)}</b></span><span>Stableford <b>${split.stableford}</b></span></div><small>${split.holes}/${split.expected_holes} holes${split.partial?' · partial':''}</small></section>`;
-        }).join('')+'</div></article>').join('');
+      rows.map((p,i)=>`<article class="v2-result" ${clickable?`role="button" tabindex="0" data-scorecard-player="${escape(p.player_id)}" aria-label="Open scorecard for ${escape(p.name)}"`:''}><div class="v2-result-name"><strong>${i+1}. ${escape(p.name)}</strong><span>Playing Handicap ${Number(p.playing_handicap)}</span></div>${resultSplits(p)}</article>`).join('');
   }
-  renderLeaderboard=rows=>{document.getElementById('leaderboardTable').innerHTML=splitMarkup(rows);};
+  const leaderboard=document.getElementById('leaderboardTable');
+  renderLeaderboard=rows=>{leaderboard.innerHTML=splitMarkup(rows,true);};
+  let scorecardLoading=false;
+  async function openPlayerScorecard(card) {
+    if(scorecardLoading)return;
+    scorecardLoading=true;
+    const playerId=card.dataset.scorecardPlayer,eventId=currentEvent?.event_id;
+    try {
+      const {scorecard:p}=await rawGet('scorecard',{eventId,playerId});
+      const d=modal('Player scorecard',`<div class="v2-scorecard-name">${escape(p.name)}</div><p>Playing Handicap ${Number(p.playing_handicap)}</p><p>${p.revealed?'Final scorecard · scores locked.':'Partial scorecard · holes 16–18 hidden until admin reveal.'}</p><table class="v2-scorecard-table"><caption>Physical hole scores</caption><thead><tr><th scope="col">Hole</th><th scope="col">Par</th><th scope="col"><abbr title="Stroke index">SI</abbr></th><th scope="col">Gross</th><th scope="col"><abbr title="Stableford points">Pts</abbr></th></tr></thead><tbody>${p.holes.map(h=>`<tr data-hole="${h.hole}"><th scope="row">${h.hole}</th><td>${h.par??'—'}</td><td>${h.stroke_index??'—'}</td><td>${h.status==='pickup'?'BLOB':h.gross??'—'}</td><td>${h.stableford??'—'}</td></tr>`).join('')}</tbody></table>${p.hidden_holes.length?'<p class="v2-note">Holes 16–18: hidden until admin reveal.</p>':''}${resultSplits(p)}`);
+      d.classList.add('v2-scorecard-dialog');d.setAttribute('aria-label','Player scorecard');
+      const back=document.createElement('button');back.type='button';back.className='v2-scorecard-back';back.textContent='Back to leaderboard';back.onclick=()=>d.close();d.prepend(back);back.focus();
+      d.addEventListener('close',()=>{
+        const target=[...leaderboard.querySelectorAll('[data-scorecard-player]')].find(el=>el.dataset.scorecardPlayer===playerId);
+        target?.focus({preventScroll:true});
+      },{once:true});
+    }catch(err){modal('Scorecard unavailable',`<p role="alert">${escape(err.message)}</p>`);}
+    finally{scorecardLoading=false;}
+  }
+  leaderboard.addEventListener('click',event=>{
+    const card=event.target.closest('[data-scorecard-player]');if(card)openPlayerScorecard(card);
+  });
+  leaderboard.addEventListener('keydown',event=>{
+    const card=event.target.closest('[data-scorecard-player]');
+    if(card&&(event.key==='Enter'||event.key===' ')){event.preventDefault();openPlayerScorecard(card);}
+  });
   renderFinishedGroupResults=async rows=>{
     document.getElementById('groupFinishResults').innerHTML=splitMarkup(rows);
   };

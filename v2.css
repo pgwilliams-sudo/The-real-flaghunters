@@ -33,3 +33,15 @@ dialog input, dialog textarea { width:100%; box-sizing:border-box; margin:10px 0
 .v2-split-values { display:flex; flex-direction:column; gap:4px; margin:8px 0; }
 .v2-split small { color:#465746; }
 @media(max-width:600px) { .v2-splits {grid-template-columns:1fr;} .v2-split-values {flex-direction:row;flex-wrap:wrap;gap:16px;} }
+
+.v2-result[role=button] { cursor:pointer; }
+.v2-result[role=button]:focus-visible { outline:3px solid #826000; outline-offset:3px; }
+.v2-scorecard-dialog { box-sizing:border-box; padding:16px; }
+.v2-scorecard-back { position:sticky; top:0; z-index:1; width:100%; background:#173c2b; color:white; border:0; border-radius:8px; margin-bottom:12px; }
+.v2-scorecard-name { font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.v2-scorecard-table { width:100%; table-layout:fixed; border-collapse:collapse; margin:12px 0; }
+.v2-scorecard-table caption { text-align:left; font-weight:600; margin-bottom:8px; }
+.v2-scorecard-table th,.v2-scorecard-table td { padding:8px 2px; text-align:center; font-size:14px; overflow-wrap:normal; }
+.v2-scorecard-table tbody tr:nth-child(even) { background:#f2f6f2; }
+.v2-scorecard-table abbr { text-decoration:none; }
+.v2-scorecard-dialog .v2-splits { grid-template-columns:1fr; }
