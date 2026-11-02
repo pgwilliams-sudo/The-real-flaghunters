@@ -19,7 +19,7 @@ test('Stage 1 diagnostic scripts parse without changing the golf application',()
 });
 test('probe installs only its own two assets with redirect rejection and a narrow scope',async()=>{
   const w=worker();await install(w);assert.equal(w.skipped,true);
-  assert.deepEqual([...w.stored.keys()],['/offline-feasibility/index.html','/offline-feasibility/probe.js']);
+  assert.deepEqual([...w.stored.keys()],['/offline-feasibility/','/offline-feasibility/probe.js']);
   assert.ok(w.requests.every(r=>r.options.redirect==='error'&&r.options.cache==='no-store'&&r.options.credentials==='same-origin'));
   let activation;w.handlers.activate({waitUntil:p=>activation=p});await activation;assert.equal(w.claimed,true);
 });

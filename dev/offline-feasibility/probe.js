@@ -4,8 +4,8 @@
   const SCOPE='/offline-feasibility/',WORKER='/offline-probe-sw.js';
   const DB='flaghunters-stage1-feasibility',CACHE='flaghunters-stage1-feasibility-v1';
   let busy=false;
-  const report={stage:1,diagnostic_version:2,secure_context:isSecureContext,service_worker_api:'serviceWorker' in navigator,
-    indexeddb_api:'indexedDB' in window,cache_api:'caches' in window,user_agent:navigator.userAgent,checks:[]};
+  const report={stage:1,diagnostic_version:3,secure_context:isSecureContext,service_worker_api:'serviceWorker' in navigator,
+    indexeddb_api:'indexedDB' in window,cache_api:'caches' in window,user_agent:navigator.userAgent,page_path:location.pathname,checks:[]};
   const state=document.getElementById('state'),output=document.getElementById('report');
   function render(message) {state.textContent=message;report.online_hint=navigator.onLine;report.controller=navigator.serviceWorker?.controller?.scriptURL||null;output.textContent=JSON.stringify(report,null,2);}
   function trace(phase,details={}) {report.checks.push({phase,...details,at:new Date().toISOString()});render(state.textContent);}
@@ -56,7 +56,7 @@
     const cache=await caches.open(CACHE),keys=await cache.keys();
     const entry={label,at:new Date().toISOString(),marker:value||null,controlled:!!navigator.serviceWorker.controller,
       worker_state:registration?.active?.state||null,scope:registration?.scope||null,cached_paths:keys.map(r=>new URL(r.url).pathname)};
-    entry.pass=!!value&&entry.controlled&&entry.worker_state==='activated'&&[SCOPE+'index.html',SCOPE+'probe.js'].every(path=>entry.cached_paths.includes(path));
+    entry.pass=!!value&&entry.controlled&&entry.worker_state==='activated'&&[SCOPE,SCOPE+'probe.js'].every(path=>entry.cached_paths.includes(path));
     report.checks.push(entry);render(entry.pass?'PASS: marker retained, worker controls this diagnostic, both assets cached.':'Not yet passed: inspect marker, controller and cache below.');
   }
   async function run(fn) {if(busy)return;busy=true;try{await fn();}catch(error){report.checks.push({error:String(error.message||error),at:new Date().toISOString()});render('Diagnostic failed; keep this report for review.');}finally{busy=false;}}
@@ -65,7 +65,7 @@
     const response=await fetch(WORKER,{cache:'no-store',redirect:'error',credentials:'same-origin'});
     report.worker_response={status:response.status,type:response.headers.get('content-type'),allowed_scope:response.headers.get('service-worker-allowed'),csp:response.headers.get('content-security-policy'),cache_control:response.headers.get('cache-control')};
     if(!response.ok||response.redirected||!/javascript/.test(report.worker_response.type||''))throw Error('Private host did not serve the worker as JavaScript');
-    for(const path of [SCOPE+'index.html',SCOPE+'probe.js']) {
+    for(const path of [SCOPE,SCOPE+'probe.js']) {
       const asset=await fetch(path,{cache:'no-store',redirect:'error',credentials:'same-origin'});
       trace('page-asset-preflight',{path,status:asset.status,content_type:asset.headers.get('content-type')});
       if(!asset.ok)throw Error('Page-context asset fetch failed: '+path+' ('+asset.status+')');

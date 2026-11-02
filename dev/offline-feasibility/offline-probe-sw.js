@@ -1,7 +1,8 @@
 /* Stage 1 diagnostic only. Root-located script, deliberately narrow scope. */
 const PROBE_SCOPE='/offline-feasibility/';
 const PROBE_CACHE='flaghunters-stage1-feasibility-v1';
-const PROBE_FILES=[PROBE_SCOPE+'index.html',PROBE_SCOPE+'probe.js'];
+const PROBE_FILES=[PROBE_SCOPE,PROBE_SCOPE+'probe.js'];
+const PROBE_ENTRY_ALIAS=PROBE_SCOPE+'index.html';
 async function probeNotice(phase,details={}) {
   try {
     const clients=await self.clients.matchAll({type:'window',includeUncontrolled:true});
@@ -21,7 +22,7 @@ self.addEventListener('install',event=>event.waitUntil((async()=>{
       const type=response.headers.get('content-type')||'';
       await probeNotice('asset-response',{path,status:response.status,content_type:type});
       if(!response.ok||response.redirected||!(path.endsWith('.js')?/javascript/:/text\/html/).test(type))throw Error('Host returned an auth redirect, error, or incorrect content type for '+path+' (status '+response.status+')');
-      if(path.endsWith('.html')&&!(await response.clone().text()).includes('<meta name="v2-stage1-probe" content="1">'))throw Error('Refusing to cache an authentication or fallback page');
+      if(path===PROBE_SCOPE&&!(await response.clone().text()).includes('<meta name="v2-stage1-probe" content="1">'))throw Error('Refusing to cache an authentication or fallback page');
       await cache.put(path,response);
       await probeNotice('asset-cached',{path});
     }
@@ -32,9 +33,10 @@ self.addEventListener('activate',event=>event.waitUntil((async()=>{await self.cl
 self.addEventListener('fetch',event=>{
   const url=new URL(event.request.url);
   // No API, app root, authentication URL, query parameters or other resources.
-  if(event.request.method!=='GET'||url.origin!==self.location.origin||url.search||!PROBE_FILES.includes(url.pathname))return;
+  const path=url.pathname===PROBE_ENTRY_ALIAS?PROBE_SCOPE:url.pathname;
+  if(event.request.method!=='GET'||url.origin!==self.location.origin||url.search||!PROBE_FILES.includes(path))return;
   event.respondWith((async()=>{
-    const cache=await caches.open(PROBE_CACHE),hit=await cache.match(url.pathname);
+    const cache=await caches.open(PROBE_CACHE),hit=await cache.match(path);
     return hit||fetch(event.request);
   })());
 });

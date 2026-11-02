@@ -6,7 +6,8 @@ async function run(browser,label) {
   for(const blocked of [false,true]) {
     const server=http.createServer((req,res)=>{
       if(!(req.headers.cookie||'').includes('probe-owner=1')){res.writeHead(401,{'Content-Type':'text/html'});res.end('Sign in required');return;}
-      const file=req.url==='/offline-probe-sw.js'?'offline-probe-sw.js':req.url==='/offline-feasibility/index.html'?'index.html':req.url==='/offline-feasibility/probe.js'?'probe.js':null;
+      if(req.url==='/offline-feasibility/index.html'){res.writeHead(308,{'Location':'/offline-feasibility/'});res.end();return;}
+      const file=req.url==='/offline-probe-sw.js'?'offline-probe-sw.js':req.url==='/offline-feasibility/'?'index.html':req.url==='/offline-feasibility/probe.js'?'probe.js':null;
       if(blocked&&file!=='offline-probe-sw.js'&&(req.headers.referer||'').endsWith('/offline-probe-sw.js')){res.writeHead(403,{'Content-Type':'text/html'});res.end('Worker-context access denied');return;}
       if(req.url==='/golf-control.html'){res.writeHead(200,{'Content-Type':'text/html'});res.end('<title>Main app control fixture</title>');return;}
       if(!file){res.writeHead(404);res.end();return;}
@@ -18,7 +19,9 @@ async function run(browser,label) {
     try {
       let page=await context.newPage();const signedOut=await page.goto(url);assert.equal(signedOut.status(),401);
       await context.addCookies([{name:'probe-owner',value:'1',url:origin}]);
-      await page.goto(url);await page.locator('#prepare').click();
+      await page.goto(url);
+      assert.equal(await page.evaluate(async()=>{try{await fetch('/offline-feasibility/index.html',{redirect:'error'});return false;}catch(_){return true;}}),true,'canonical redirect must reproduce the original preflight rejection');
+      await page.locator('#prepare').click();
       await page.waitForFunction(()=>/Prepared\.|Diagnostic failed/.test(document.getElementById('state').textContent),{},{timeout:35000});
       const report=JSON.parse(await page.locator('#report').innerText());
       if(blocked) {
