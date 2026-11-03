@@ -37,7 +37,7 @@
           const result=await rawPost({action:'openGroup',pin,eventId,groupNo});
           await local.putSession(API_URL,eventId,groupNo,{token:result.token,credentialId:result.credential_id,expires_at:result.expires_at});
           resolve(result.token);d.close();
-        }catch(err){d.querySelector('#v2AccessError').textContent=err.message;}
+        }catch(err){d.querySelector('#v2AccessError').textContent=friendly(err);}
       };
     });
   }
@@ -57,21 +57,55 @@
   const recoveryPanel=document.createElement('section');recoveryPanel.className='v2-local-status';
   recoveryPanel.innerHTML='<strong>Device saves</strong><p id="v2LocalSummary" role="status">Checking local storage…</p><button id="v2RetryLocal">Retry synchronization</button><button id="v2ReviewLocal">Review / export local scores</button><button id="v2ForgetLocal">Forget this prepared round</button>';
   document.body.prepend(recoveryPanel);
+  function currentRound(d) {return d.identity.backend===API_URL&&d.identity.eventId===currentEvent?.event_id;}
+  const friendly=error=>V2Recovery.message(error);
   async function refreshLocalStatus() {
     try {
-      const pending=await local.pending();
-      document.getElementById('v2LocalSummary').textContent=pending.length?`${pending.length} saved hole request(s) await server acceptance. ${pending.filter(d=>d.status==='syncing').length} syncing; ${pending.filter(d=>d.status==='needs-review').length} need review. They remain on this device.`:'No local scores are awaiting server acceptance.';
-    }catch(error){document.getElementById('v2LocalSummary').textContent='Local storage unavailable. Scoring cannot claim a device save: '+error.message;}
+      const pending=await local.pending(),current=pending.filter(currentRound),older=pending.length-current.length;
+      const count=current.length?`${current.length} saved hole request(s) await server acceptance for this round. ${current.filter(d=>d.status==='syncing').length} syncing; ${current.filter(d=>d.status==='needs-review').length} need review.`:'No local scores are awaiting server acceptance for this round.';
+      document.getElementById('v2LocalSummary').textContent=count+(older?` ${older} request(s) belong to other rounds/backends; retained for review/export and not automatically retried.`:'');
+    }catch(error){document.getElementById('v2LocalSummary').textContent='Local storage unavailable. '+friendly(error);}
   }
   async function exportLocal() {
     const data=await local.recovery(),url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
     const link=document.createElement('a');link.href=url;link.download='flaghunters-local-score-recovery.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),10000);
   }
   function recoveryDialog(message='') {
-    return local.pending().then(pending=>{
-      const d=modal('Local score recovery',`<p>${escape(message||'Saved requests stay on this device after reloads or failed responses. Automatic synchronization runs in order with available group credentials. Use Retry synchronization to retry unchanged requests; conflicts and unavailable original credentials need review. No requests are discarded or submitted under a different identity.')}</p>${pending.map(d=>`<p>Group ${d.identity.groupNo} · hole ${d.request.hole} · ${escape(({local:'Saved on this device','awaiting-server':'Awaiting server acceptance',syncing:'Syncing','needs-review':'Needs review'})[d.status]||d.status)}${d.lastError?' · '+escape(d.lastError):''}</p>`).join('')}<p>The recovery file includes private group scores and correction reasons. Keep it private. It contains no bearer tokens, PINs or admin password.</p><button id="v2ExportLocal">Export recovery file</button>`);
-      d.querySelector('#v2ExportLocal').onclick=()=>exportLocal().catch(error=>alert(error.message));
-    }).catch(error=>alert(error.message));
+    return Promise.all([local.pending(),local.recovery()]).then(([pending,archive])=>{
+      const entries=(rows,old)=>rows.map(d=>`<article class="v2-recovery-entry"><strong>Group ${d.identity.groupNo} · hole ${d.request.hole}</strong><p>${escape(old?'Other round/backend · '+d.identity.eventId:'Current round')} · ${escape(({local:'Saved on this device',recovering:'Confirmed recovery queued',syncing:'Syncing','awaiting-server':'Acceptance unconfirmed','needs-review':'Needs review'})[d.status]||d.status)}</p><p>${escape(d.lastError||'Awaiting server acceptance')}</p><details><summary>Stored local scores</summary>${d.request.scores.map(s=>`<p>${escape(s.playerId)}: ${s.status==='pickup'?'BLOB':s.gross}${s.reason?' · '+escape(s.reason):''}</p>`).join('')}</details>${!old?`${d.failureKind==='credential'?`<button data-reauth-group="${d.identity.groupNo}">Sign in to this group</button>`:''}<button data-review-operation="${escape(d.operationId)}">Review server and local scores</button>${d.recoveryIntent?`<button data-resume-operation="${escape(d.operationId)}">Resume confirmed recovery</button>`:''}`:'<p>Retained for export. Open its original round/backend to recover; this round’s Retry will not send it.</p>'}</article>`).join('');
+      const d=modal('Local score recovery',`<p>${escape(message||'Saved requests stay on this device. Expired access and conflicts pause automatic retries. Review server values before changing a rejected request.')}</p><h3>Current round</h3>${entries(pending.filter(currentRound),false)||'<p>No pending requests for this round.</p>'}<h3>Other rounds and backends</h3>${entries(pending.filter(x=>!currentRound(x)),true)||'<p>No older pending requests.</p>'}<details><summary>Resolved decisions retained on this device (${archive.drafts.filter(x=>x.status==='resolved').length})</summary>${archive.drafts.filter(x=>x.status==='resolved').map(x=>`<article class="v2-recovery-entry"><strong>Group ${x.identity.groupNo} · hole ${x.request.hole}</strong><p>${escape(x.identity.eventId)} · ${escape(x.resolution.outcome)}</p><p>Original local request retained:</p>${x.request.scores.map(s=>`<p>${escape(s.playerId)}: ${s.status==='pickup'?'BLOB':s.gross}${s.reason?' · '+escape(s.reason):''}</p>`).join('')}</article>`).join('')}</details><p>Exports contain private scores and reasons, without bearer tokens, PINs or admin passwords.</p><button id="v2ExportLocal">Export recovery file</button>`);
+      d.querySelector('#v2ExportLocal').onclick=()=>exportLocal().catch(error=>alert(friendly(error)));
+      d.querySelectorAll('[data-reauth-group]').forEach(button=>button.onclick=()=>{d.close();state.admin='';adminPinValue='';selectGroup(Number(button.dataset.reauthGroup));});
+      d.querySelectorAll('[data-review-operation]').forEach(button=>button.onclick=()=>reviewOperation(button.dataset.reviewOperation));
+      d.querySelectorAll('[data-resume-operation]').forEach(button=>button.onclick=()=>synchronize({force:true,review:true,operationId:button.dataset.resumeOperation}));
+    }).catch(error=>alert(friendly(error)));
+  }
+  async function reviewOperation(operationId) {
+    try {
+      const review=await recovery.review(operationId);
+      if(review.done){await refreshProjection();return recoveryDialog('Server acceptance was reconciled. No duplicate score was submitted.');}
+      if(review.externalResolution)throw Error('Recovery was completed in another session. Export this record for review; no new submission was made.');
+      const locked=review.meta?.locked||review.meta?.revealed_at;
+      const value=s=>!s?'Not scored':s.score_status==='pickup'||s.status==='pickup'?'BLOB':String(s.gross);
+      const d=modal('Review score conflict',`<p>Group ${review.draft.identity.groupNo} · hole ${review.draft.request.hole}. Nothing is overwritten until you confirm.</p>${review.draft.request.scores.map(item=>{
+        const accepted=review.serverScores.find(s=>String(s.player_id)===String(item.playerId));
+        const name=localState.snapshot?.group.find(p=>String(p.player_id)===String(item.playerId))?.player_name||item.playerId;
+        return `<article class="v2-recovery-entry"><strong>${escape(name)}</strong><p>Server accepted: <b>${escape(value(accepted))}</b> · revision ${accepted?.revision||0}</p><p>Your pending change: <b>${escape(value(item))}</b></p>${item.reason?`<p>Original reason: ${escape(item.reason)}</p>`:''}<label><input type="checkbox" class="v2-use-local" value="${escape(item.playerId)}" ${locked?'disabled':''}> Use my pending change</label></article>`;
+      }).join('')}${locked?'<p role="alert">Final results are permanently locked. This request remains available for export; no resubmission is allowed.</p>':'<label for="v2RecoveryReason">Additional correction reason (original reasons are retained)</label><textarea id="v2RecoveryReason" maxlength="500" rows="2"></textarea><button id="v2KeepServer">Keep server values</button><button id="v2ResubmitLocal">Resubmit selected changes</button>'}<p id="v2RecoveryMessage" role="alert"></p>`);
+      if(locked)return;
+      async function choose(choice) {
+        const selected=[...d.querySelectorAll('.v2-use-local:checked')].map(el=>el.value),reason=d.querySelector('#v2RecoveryReason').value;
+        if(!confirm(choice==='server'?'Keep the reviewed server values and archive this local change? The original request remains in your recovery export.':'Resubmit only the selected local changes against the displayed server revisions? Reasons and original history are retained.'))return;
+        d.querySelectorAll('button,input,textarea').forEach(el=>el.disabled=true);
+        try {await recovery.decide(review,choice,selected,reason,true);d.close();await synchronize({force:true,review:true,operationId});await refreshProjection();await recoveryDialog();}
+        catch(error){d.querySelector('#v2RecoveryMessage').textContent=friendly(error);d.querySelectorAll('button,input,textarea').forEach(el=>el.disabled=false);}
+      }
+      d.querySelector('#v2KeepServer').onclick=()=>choose('server');d.querySelector('#v2ResubmitLocal').onclick=()=>choose('local');
+    }catch(error){await recoveryDialog(friendly(error));}
+  }
+  async function refreshProjection() {
+    if(localState.identity){allScores=(await projection(localState.identity)).scores;if(!state.dirty&&document.getElementById('scoreScreen').classList.contains('active'))renderScoring();}
+    await refreshLocalStatus();await finishGate();
   }
   document.getElementById('v2ReviewLocal').onclick=()=>recoveryDialog();
   document.getElementById('v2ForgetLocal').onclick=async()=>{
@@ -159,7 +193,7 @@
       try{localState.competitions=await apiGet('competitions',{eventId:currentEvent.event_id});}catch(error){if(!localState.snapshot||error.name!=='TypeError')throw error;}
       const boot=await apiPost({action:'roundBootstrap',eventId:currentEvent.event_id,groupNo:Number(groupNo)});
       state.meta=boot.meta;course=boot.course;allGroups=boot.groups;allScores=boot.scores;
-      await originalSelect(groupNo);await refreshLocalStatus();void synchronize({force:true});
+      await originalSelect(groupNo);await refreshLocalStatus();void synchronize({force:true,review:true});
     }catch(error){alert(error.message);}
   };
   function resultSplits(p) {
@@ -273,8 +307,7 @@
       modal('Immutable revision history',result.history.map(c=>`<article class="v2-history-entry"><strong>Revision ${Number(c.after.revision)}: ${escape(display(c.before))} → ${escape(display(c.after))}</strong><p>${escape(c.reason)}</p><p>${escape(c.actor.role)} · ${escape(c.actor.credential_id)}</p><time>${escape(c.after.updated_at)}</time></article>`).join('')||'<p>No revisions.</p>');
     }catch(err){alert(err.message);}
   }
-  const sync=V2Sync.create({local,backend:API_URL,transport:rawPost,
-    credential:async who=>{
+  async function recoveryCredential(who) {
       if(who.backend!==API_URL)return null;
       const tokens=[];
       if(localState.identity?.eventId===who.eventId&&localState.identity?.groupNo===who.groupNo)tokens.push(state.admin,state.group);
@@ -282,10 +315,19 @@
       if(cached?.expires_at>Date.now())tokens.push(cached.token);
       const token=tokens.find(t=>t&&t.split('.')[0]===who.credentialId)||tokens.find(Boolean);
       return token?{token}:null;
-    },
+  }
+  const recovery=V2Recovery.create({local,backend:API_URL,transport:rawPost,credential:recoveryCredential});
+  const sync=V2Sync.create({local,backend:API_URL,transport:rawPost,credential:recoveryCredential,activeEvent:()=>currentEvent?.event_id,
+    onError:error=>{document.getElementById('v2LocalSummary').textContent=friendly(error);},
     onChange:async(draft,error)=>{
       if(localState.identity&&local.key(localState.identity)===draft.scope) {
         allScores=(await projection(draft.identity)).scores;
+        if(error&&V2Sync.classify(error)==='credential'){
+          const cached=await local.getSession(draft.identity.backend,draft.identity.eventId,draft.identity.groupNo);
+          if(state.admin?.split('.')[0]===draft.identity.credentialId)state.admin='';
+          if(cached?.credentialId===draft.identity.credentialId)await local.removeSession(draft.identity.backend,draft.identity.eventId,draft.identity.groupNo);
+          state.group='';
+        }
         if(error&&/permanently locked/i.test(error.message)) {
           state.meta.locked=true;
           const snapshot=await local.getSnapshot(draft.identity);
@@ -296,8 +338,8 @@
         if(!state.dirty) {
           const record=await local.getDraft(draft.operationId);
           if(Number(holeOrder[holeIndex])===draft.request.hole)renderScoring();
-          showMessage('scoreMessage',error?'Saved on this device; server acceptance unconfirmed: '+error.message+'. The stored request is retained.':
-            record.status==='accepted'?'Saved to server.':'Syncing saved scores; retained on this device.',error?'bad':record.status==='accepted'?'good':'info');
+          showMessage('scoreMessage',error?'Saved on this device; server acceptance unconfirmed: '+friendly(error)+'. The stored request is retained.':
+            ['accepted','resolved'].includes(record.status)?'Saved to server.':'Syncing saved scores; retained on this device.',error?'bad':['accepted','resolved'].includes(record.status)?'good':'info');
         }
       }
       await refreshLocalStatus();await finishGate();
@@ -305,7 +347,7 @@
   });
   function synchronize(options) {
     return sync.kick(options).catch(error=>{
-      document.getElementById('v2LocalSummary').textContent='Synchronization needs attention; stored requests are retained. '+error.message;
+      document.getElementById('v2LocalSummary').textContent='Synchronization paused; stored requests are retained. '+friendly(error);
     });
   }
   document.getElementById('v2RetryLocal').onclick=()=>synchronize({force:true,review:true});
@@ -338,7 +380,7 @@
       renderScoring();showMessage('scoreMessage',note,'info');await refreshLocalStatus();
       // Queue dispatch is detached from the confirmed local save and advancement.
       void synchronize({force:draft.attempts>0,review:draft.status==='needs-review'});
-    }catch(error){showMessage('scoreMessage','Not saved on this device: '+error.message,'bad');}
+    }catch(error){showMessage('scoreMessage','Not saved on this device: '+friendly(error),'bad');}
     finally{localState.saving=false;controls.forEach(([el,disabled])=>{if(el.isConnected)el.disabled=disabled;});await finishGate();}
   }
   saveAndNext=async()=>{
@@ -361,8 +403,11 @@
   const access=document.createElement('section');access.className='card v2-credentials';access.innerHTML='<div class="sub-title">Group scoring PINs</div><p>Generate a two-digit PIN after saving the groups. Share it privately with the group scorer. Rotating it ends existing group sessions.</p><label for="v2IssueGroup">Group number</label><input id="v2IssueGroup" type="number" min="1" inputmode="numeric" value="1"><button id="v2Issue" class="secondary-button">Generate / rotate group PIN</button><p id="v2Issued" role="status"></p><button id="v2Recover" class="secondary-button">Recover pending score writes</button><button id="v2AdminLogout">Sign out of admin</button>';
   document.getElementById('adminScreen').append(access);
   access.querySelector('#v2Issue').onclick=async()=>{
-    try{const eventId=adminEventId||currentEvent?.event_id;if(!eventId)throw new Error('Create a round and save groups first.');const r=await apiPost({action:'issueGroupCredential',eventId,groupNo:Number(document.getElementById('v2IssueGroup').value)});document.getElementById('v2Issued').textContent=r.pin;}
-    catch(err){document.getElementById('v2Issued').textContent=err.message;}
+    const button=access.querySelector('#v2Issue');if(button.disabled)return;button.disabled=true;
+    document.getElementById('v2Issued').textContent='Generating PIN… Wait for this request before retrying.';
+    try{const eventId=adminEventId||currentEvent?.event_id;if(!eventId)throw Error('Create a round and save groups first.');const r=await apiPost({action:'issueGroupCredential',eventId,groupNo:Number(document.getElementById('v2IssueGroup').value)});document.getElementById('v2Issued').textContent=r.pin;}
+    catch(error){document.getElementById('v2Issued').textContent=/lock.*timeout/i.test(error.message)?'The test server is busy. Wait for other requests to finish, then retry once. Do not clear browser data.':friendly(error);}
+    finally{button.disabled=false;}
   };
   access.querySelector('#v2Recover').onclick=async()=>{try{await apiPost({action:'recoverScores',eventId:adminEventId||currentEvent?.event_id});document.getElementById('v2Issued').textContent='Accepted score writes recovered. Reload scores before correcting.';}catch(err){document.getElementById('v2Issued').textContent=err.message;}};
   const reveal=document.createElement('button');reveal.id='v2Reveal';reveal.textContent='Reveal final clubhouse results';reveal.className='primary-button';
@@ -390,5 +435,5 @@
   };
   refreshLocalStatus();
   void synchronize({force:true});
-  if(API_URL) initialise();
+  if(API_URL) Promise.resolve(initialise()).then(()=>{refreshLocalStatus();void synchronize({force:true});});
 })();

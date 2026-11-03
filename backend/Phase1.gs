@@ -67,10 +67,10 @@ function v2Writable(eventId) {
   if(!['active','complete'].includes(String(event.status).toLowerCase())) throw new Error('Round cannot be edited');
   return meta;
 }
-function v2Issue(role,eventId,groupNo) {
+function v2Issue(role,eventId,groupNo,extra={}) {
   const id=v2Id(),secret=role==='scorer'?v2GroupSecret(id):v2Id()+v2Id();
   const data={role,event_id:String(eventId||''),group_no:Number(groupNo)||0,hash:v2Hash(secret),
-    expires_at:Date.now()+(role==='admin'?12*3600:30*86400)*1000,revoked:false};
+    expires_at:Date.now()+(role==='admin'?12*3600:30*86400)*1000,revoked:false,...extra};
   v2Append('ScoringCredentials',[id,JSON.stringify(data)]);
   return {token:id+'.'+secret,credential_id:id,role,expires_at:data.expires_at};
 }
@@ -187,19 +187,20 @@ function v2EnsureImmutableRow(table,operation,key,revision,data) {
   if(!existing.length) v2Append(table,[operation,key,revision,encoded]);
 }
 /** WAL recovery. PREPARED rows contain the complete validated result, never a credential secret. */
-function v2Recover(eventId) {
-  v2Operations(eventId).filter(o=>o.state==='PREPARED').forEach(o=>{
-    o.payload.changes.forEach(c=>{
-      v2EnsureImmutableRow('ScoresV2',o.operation_id,c.key,c.after.revision,c.after);
-      v2EnsureImmutableRow('ScoreHistory',o.operation_id,c.key,c.after.revision,c);
-    });
-    SpreadsheetApp.flush(); // All projections/history must persist before the visibility marker.
-    v2Put('ScoreOperations',o.operation_id,[o.operation_id,'COMMITTED',o.data]);
-    SpreadsheetApp.flush();
+function v2RecoverOperation(o) {
+  o.payload.changes.forEach(c=>{
+    v2EnsureImmutableRow('ScoresV2',o.operation_id,c.key,c.after.revision,c.after);
+    v2EnsureImmutableRow('ScoreHistory',o.operation_id,c.key,c.after.revision,c);
   });
+  SpreadsheetApp.flush();
+  v2Put('ScoreOperations',o.operation_id,[o.operation_id,'COMMITTED',o.data]);
+  SpreadsheetApp.flush();
 }
-function v2Save(data,actor) {
-  return withScriptLock(()=>{
+function v2Recover(eventId) {
+  v2Operations(eventId).filter(o=>o.state==='PREPARED').forEach(v2RecoverOperation);
+}
+function v2Save(data,actor) {return withScriptLock(()=>v2SaveLocked(data,actor));}
+function v2SaveLocked(data,actor,dryRun=false) {
     const eventId=String(data.eventId||''),meta=v2Writable(eventId);
     v2Scope(actor,eventId,(data.scores||[]).map(s=>s.playerId));
     if(!/^[a-zA-Z0-9_-]{16,100}$/.test(String(data.operationId||''))) throw new Error('A stable operation ID is required');
@@ -208,6 +209,8 @@ function v2Save(data,actor) {
     const prior=v2Rows('ScoreOperations').find(r=>r.operation_id===data.operationId);
     if(prior) {
       const p=JSON.parse(prior.data);
+      if(!['COMMITTED','PREPARED','CANCELLED'].includes(prior.state))throw Error('Journal integrity error: unknown operation state');
+      if(prior.state==='CANCELLED')throw Error('Operation resolved after review; reopen recovery');
       if(p.actor.credential_id!==actor.credential_id || p.request_hash!==requestHash || p.event_id!==eventId) throw new Error('Operation ID reused with different request');
       v2Recover(eventId); return p.result;
     }
@@ -247,29 +250,109 @@ function v2Save(data,actor) {
       return c?c.after:scores.find(s=>String(s.player_id)===String(item.playerId)&&Number(s.hole)===hole);
     })};
     const payload={event_id:eventId,actor,request_hash:requestHash,changes,result};
+    if(dryRun)return result;
     v2Append('ScoreOperations',[data.operationId,'PREPARED',JSON.stringify(payload)]);
     SpreadsheetApp.flush();
-    v2Recover(eventId);
+    v2RecoverOperation({operation_id:data.operationId,data:JSON.stringify(payload),payload});
     return result;
-  });
 }
 /** Authenticated reconciliation of an immutable request, including after reveal/rotation.
  * Only accepted journal intents are recovered; this never creates a new score operation.
  */
+function v2StatusRead(data,actor,recover=false) {
+  const eventId=String(data.eventId||'');
+  v2Scope(actor,eventId,(data.scores||[]).map(s=>s.playerId),data.groupNo);
+  if(!/^[a-zA-Z0-9_-]{16,100}$/.test(String(data.operationId||'')))throw Error('A stable operation ID is required');
+  const prior=v2Rows('ScoreOperations').find(r=>r.operation_id===data.operationId);
+  if(!prior)return {ok:true,state:'ABSENT'};
+  const p=JSON.parse(prior.data);
+  if(!['COMMITTED','PREPARED','CANCELLED'].includes(prior.state))throw Error('Journal integrity error: unknown operation state');
+  if(p.event_id!==eventId)throw Error('Operation does not authorize this round');
+  v2Scope(actor,eventId,p.player_ids||p.result.scores.map(s=>s.player_id));
+  if(v2Hash(JSON.stringify({eventId,hole:Number(data.hole),scores:data.scores}))!==p.request_hash)throw Error('Operation ID reused with different request');
+  if(prior.state==='PREPARED') {
+    if(!recover)return {ok:true,state:'PREPARED'};
+    v2RecoverOperation({operation_id:prior.operation_id,data:prior.data,payload:p});
+  }
+  if(prior.state==='CANCELLED') {
+    const intent=p.resolutions[p.resolutions.length-1];
+    if(intent.result)return {ok:true,state:'CANCELLED',resolution:intent.result};
+    const child=v2Rows('ScoreOperations').find(r=>r.operation_id===intent.id);
+    if(child) {
+      const accepted=JSON.parse(child.data),expected=v2Hash(JSON.stringify({eventId:p.event_id,hole:Number(intent.request.hole),scores:intent.request.scores}));
+      if(accepted.event_id!==p.event_id||accepted.request_hash!==expected)throw Error('Recovery operation ID reused with different request');
+      v2Scope(actor,p.event_id,accepted.result.scores.map(s=>s.player_id));
+    }
+    if(child&&child.state==='PREPARED') {
+      if(!recover)return {ok:true,state:'PREPARED'};
+      v2RecoverOperation({operation_id:child.operation_id,data:child.data,payload:JSON.parse(child.data)});
+    }
+    if(child&&['PREPARED','COMMITTED'].includes(child.state))return {ok:true,state:'CANCELLED',resolution:{outcome:'replacement-accepted',operationId:intent.id,scores:JSON.parse(child.data).result.scores}};
+    return {ok:true,state:'CANCELLED'};
+  }
+  return {ok:true,state:'COMMITTED',result:p.result};
+}
 function v2OperationStatus(data,actor) {
+  // Committed journal results are immutable. No lock or whole-round recovery for a read.
+  const result=v2StatusRead(data,actor);
+  return result.state==='PREPARED'?withScriptLock(()=>v2StatusRead(data,actor,true)):result;
+}
+function v2ReviewOperation(data,actor) {
   return withScriptLock(()=>{
-    const eventId=String(data.eventId||'');
-    v2Scope(actor,eventId,(data.scores||[]).map(s=>s.playerId),data.groupNo);
-    if(!/^[a-zA-Z0-9_-]{16,100}$/.test(String(data.operationId||'')))throw Error('A stable operation ID is required');
-    const prior=v2Rows('ScoreOperations').find(r=>r.operation_id===data.operationId);
-    if(!prior)return {ok:true,state:'ABSENT'};
-    const p=JSON.parse(prior.data);
-    if(p.event_id!==eventId)throw Error('Operation does not authorize this round');
-    v2Scope(actor,eventId,p.result.scores.map(s=>s.player_id));
-    const hash=v2Hash(JSON.stringify({eventId,hole:Number(data.hole),scores:data.scores}));
-    if(hash!==p.request_hash)throw Error('Operation ID reused with different request');
-    v2Recover(eventId);
-    return {ok:true,state:'COMMITTED',result:p.result};
+    const status=v2StatusRead(data,actor,true),event=getEventById(data.eventId);
+    if(!event)throw Error('Old round is unavailable on this backend; retain/export its local records');
+    v2Recover(String(data.eventId));
+    const ids=(data.scores||[]).map(s=>String(s.playerId));
+    return {...status,meta:v2Meta(data.eventId),scores:getScores(data.eventId).filter(s=>ids.includes(String(s.player_id))&&Number(s.hole)===Number(data.hole))};
+  });
+}
+function v2ResolveOperation(data,actor) {
+  return withScriptLock(()=>{
+    const original=data.original;
+    if(!original||!['server','local'].includes(data.choice)||!/^[a-zA-Z0-9_-]{16,100}$/.test(String(data.resolutionId||''))||data.resolutionId===original.operationId)throw Error('Invalid reviewed recovery request');
+    const status=v2StatusRead(original,actor,true);
+    if(status.state==='COMMITTED')return {ok:true,outcome:'original-accepted',scores:status.result.scores};
+    const eventId=String(original.eventId),rows=v2Rows('ScoreOperations');
+    const prior=rows.find(r=>r.operation_id===original.operationId),p=prior&&JSON.parse(prior.data);
+    const hash=v2Hash(JSON.stringify({choice:data.choice,reviewed:data.reviewed,replacement:data.replacement}));
+    const known=p?.resolutions?.find(r=>r.id===data.resolutionId);
+    if(known&&known.hash!==hash)throw Error('Recovery ID reused with different request');
+    if(known?.result)return {ok:true,...known.result};
+    if(status.resolution)return {ok:true,...status.resolution};
+    // Resume the durably recorded decision; current authentication/scope are rechecked.
+    const decision=known||{id:data.resolutionId,hash,choice:data.choice,request:data.replacement,reviewed:data.reviewed,actor,reviewed_at:v2Now()};
+    v2Writable(eventId);v2Scope(actor,eventId,original.scores.map(s=>s.playerId),original.groupNo);v2Recover(eventId);
+    const ids=original.scores.map(s=>String(s.playerId)),current=getScores(eventId).filter(s=>ids.includes(String(s.player_id))&&Number(s.hole)===Number(original.hole));
+    if(!known||decision.choice==='server') {
+      const reviewed=known?decision.reviewed:data.reviewed;
+      if(!Array.isArray(reviewed)||reviewed.length!==ids.length||new Set(reviewed.map(s=>String(s.playerId))).size!==ids.length)throw Error('Review every player before recovery');
+      for(const item of reviewed) {
+        const before=current.find(s=>String(s.player_id)===String(item.playerId));
+        if(!ids.includes(String(item.playerId))||item.revision!==(before?.revision||0))throw Error('Score changed again. Review the latest server values before confirming.');
+      }
+    }
+    if(decision.choice==='local') {
+      const replacement=decision.request;
+      if(!replacement||replacement.action!=='saveHoleScores'||replacement.eventId!==eventId||replacement.hole!==Number(original.hole)||replacement.scores.length!==ids.length||new Set(replacement.scores.map(s=>String(s.playerId))).size!==ids.length||replacement.scores.some(s=>!ids.includes(String(s.playerId))))throw Error('Recovery cannot change round, hole or players');
+      // Validate before cancelling the original. Existing revision/reason checks remain mandatory.
+      v2SaveLocked({...replacement,operationId:decision.id},actor,true);
+    }
+    if(!known) {
+      if(rows.some(r=>r.operation_id===decision.id))throw Error('Recovery operation ID is already in use');
+      const payload=p||{event_id:eventId,request_hash:v2Hash(JSON.stringify({eventId,hole:Number(original.hole),scores:original.scores})),player_ids:ids,resolutions:[]};
+      payload.resolutions.push(decision);
+      // A tombstone prevents a delayed original upload from undoing the reviewed decision.
+      v2Put('ScoreOperations',original.operationId,[original.operationId,'CANCELLED',JSON.stringify(payload)]);SpreadsheetApp.flush();
+    }
+    let result;
+    if(decision.choice==='local') {
+      const saved=v2SaveLocked({...decision.request,operationId:decision.id},actor);
+      result={outcome:'replacement-accepted',operationId:decision.id,scores:saved.scores};
+    }else result={outcome:'kept-server',operationId:decision.id,scores:current};
+    const record=v2Rows('ScoreOperations').find(r=>r.operation_id===original.operationId),payload=JSON.parse(record.data);
+    payload.resolutions.find(r=>r.id===decision.id).result=result;
+    v2Put('ScoreOperations',original.operationId,[original.operationId,'CANCELLED',JSON.stringify(payload)]);SpreadsheetApp.flush();
+    return {ok:true,...result};
   });
 }
 function doGet(e) {
@@ -303,6 +386,8 @@ function doPost(e) {
     }
     if(action==='openGroup') return jsonResponse(v2OpenGroup(data));
     const actor=v2Auth(data.credential);
+    if(action==='reviewOperation')return jsonResponse(v2ReviewOperation(data,actor));
+    if(action==='resolveOperation')return jsonResponse(v2ResolveOperation(data,actor));
     if(action==='operationStatus')return jsonResponse(v2OperationStatus(data,actor));
     if(action==='revealResults') return jsonResponse(v2RevealResults(data,actor));
     if(action==='adminCompetitionData') {v2Admin(actor);return jsonResponse({ok:true,...getCompetitionData(data.eventId)});}
@@ -311,14 +396,12 @@ function doPost(e) {
       v2Admin(actor); v2Writable(data.eventId);
       const group=getGroups(data.eventId).filter(p=>p.group_no===Number(data.groupNo));
       if(!group.length || group.filter(p=>p.scorer).length!==1) throw new Error('Group must have one assigned scorer');
-      const previous=v2Rows('ScoringCredentials').reverse().find(r=>{const c=JSON.parse(r.data);return c.role==='scorer'&&c.event_id===String(data.eventId)&&c.group_no===Number(data.groupNo)&&!c.revoked;});
-      const pin=v2GroupPin(previous&&JSON.parse(previous.data).pin_hash);
-      // Rotation revokes earlier credentials for this group.
-      v2Rows('ScoringCredentials').forEach(r=>{const c=JSON.parse(r.data);if(c.role==='scorer'&&c.event_id===String(data.eventId)&&c.group_no===Number(data.groupNo)){c.revoked=true;v2Put('ScoringCredentials',r.credential_id,[r.credential_id,JSON.stringify(c)]);}});
-      const issued=v2Issue('scorer',data.eventId,data.groupNo);
-      const row=v2Rows('ScoringCredentials').find(r=>r.credential_id===issued.credential_id),c=JSON.parse(row.data);
-      c.pin_hash=v2Hash(pin);
-      v2Put('ScoringCredentials',row.credential_id,[row.credential_id,JSON.stringify(c)]);
+      const table=v2Table('ScoringCredentials'),values=table.getDataRange().getValues();
+      const credentials=values.slice(1).map((r,i)=>({id:r[0],row:i+2,data:JSON.parse(r[1])}));
+      const active=credentials.filter(r=>r.data.role==='scorer'&&r.data.event_id===String(data.eventId)&&r.data.group_no===Number(data.groupNo)&&!r.data.revoked);
+      const pin=v2GroupPin(active.length?active[active.length-1].data.pin_hash:null);
+      for(const row of active){row.data.revoked=true;table.getRange(row.row,1,1,2).setValues([[row.id,JSON.stringify(row.data)]]);}
+      const issued=v2Issue('scorer',data.eventId,data.groupNo,{pin_hash:v2Hash(pin)});
       return {ok:true,pin,credential_id:issued.credential_id,expires_at:issued.expires_at};
     }));
     if(action==='verifyGroupCredential') { v2Scope(actor,data.eventId,[],data.groupNo); return jsonResponse({ok:true,actor}); }

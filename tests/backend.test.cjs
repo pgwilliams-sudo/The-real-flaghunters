@@ -1,7 +1,7 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),crypto=require('node:crypto'),fs=require('node:fs'),vm=require('node:vm');
 const {harness}=require('./harness.cjs');
 test('all backend and frontend scripts parse',()=>{
-  for(const p of ['backend/Code.gs','backend/Phase1.gs','v2-local.js','v2-sync.js','v2.js'])new vm.Script(fs.readFileSync(p,'utf8'),{filename:p});
+  for(const p of ['backend/Code.gs','backend/Phase1.gs','v2-local.js','v2-sync.js','v2-recovery.js','v2.js'])new vm.Script(fs.readFileSync(p,'utf8'),{filename:p});
   for(const m of fs.readFileSync('index.html','utf8').matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi))new vm.Script(m[1]);
 });
 test('pickup is completed, nullable gross/net and distinct from numeric zero points',()=>{

@@ -12,7 +12,7 @@
   const key=value=>JSON.stringify(Object.values(identity(value)));
   const sessionKey=(backend,eventId,groupNo)=>JSON.stringify([backend,eventId,Number(groupNo)]);
   const matches=(value,filter={})=>Object.entries(filter).every(([name,v])=>value[name]===v);
-  const unaccepted=draft=>draft.status!=='accepted';
+  const unaccepted=draft=>!['accepted','resolved'].includes(draft.status);
   function database() {
     if(!root.indexedDB)return Promise.reject(Error('IndexedDB unavailable; scores cannot be saved safely on this device'));
     if(!opening)opening=new Promise((resolve,reject)=>{
@@ -137,15 +137,15 @@
   async function markSending(operationId,submission=true) {
     return transaction(['drafts'],'readwrite',(tx,done,fail)=>{
       const table=tx.objectStore('drafts'),r=table.get(operationId);r.onsuccess=()=>{try{
-        const d=r.result;if(!d||d.status==='accepted')throw Error('Local request not pending');
-        d.status='syncing';if(submission)d.attempts++;d.lastAttemptAt=Date.now();table.put(d);done(d);
+        const d=r.result;if(!d||!unaccepted(d))throw Error('Local request not pending');
+        d.status='syncing';delete d.lastError;delete d.failureKind;if(submission)d.attempts++;d.lastAttemptAt=Date.now();table.put(d);done(d);
       }catch(e){fail(e);}};
     });
   }
-  async function problem(operationId,message,{retryable=false,nextAttemptAt=0}={}) {
+  async function problem(operationId,message,{retryable=false,nextAttemptAt=0,kind='rejected'}={}) {
     return transaction(['drafts'],'readwrite',(tx,done)=>{
       const table=tx.objectStore('drafts'),r=table.get(operationId);r.onsuccess=()=>{
-        const d=r.result;if(d&&unaccepted(d)){d.status=retryable?'local':'needs-review';d.nextAttemptAt=nextAttemptAt;d.lastError=String(message);table.put(d);}done(d);
+        const d=r.result;if(d&&unaccepted(d)){d.status=retryable?'local':'needs-review';d.failureKind=kind;d.nextAttemptAt=nextAttemptAt;d.lastError=String(message);table.put(d);}done(d);
       };
     });
   }
@@ -173,6 +173,65 @@
             else if((snapshot.acceptedScores[index].revision||0)<=result.revision)snapshot.acceptedScores[index]=clone(result);
           }
           d.status='accepted';d.acceptedAt=Date.now();delete d.lastError;table.put(snapshot);drafts.put(d);done(d);
+        }catch(e){fail(e);}};
+      }catch(e){fail(e);}};
+    });
+  }
+  async function beginRecovery(operationId,intent,confirmed,expectedRecoveryId=null) {
+    if(confirmed!==true)throw Error('Confirm your reviewed choice before recovery');
+    if(!['server','local'].includes(intent.choice)||!/^[a-zA-Z0-9_-]{16,100}$/.test(intent.resolutionId))throw Error('Invalid recovery decision');
+    // Whitelist: no credentials can enter recovery intents/exports.
+    const replacement=intent.replacement?{action:'saveHoleScores',eventId:intent.replacement.eventId,hole:intent.replacement.hole,
+      scores:intent.replacement.scores.map(s=>({playerId:s.playerId,status:s.status,gross:s.gross,expectedRevision:s.expectedRevision,reason:String(s.reason||'').trim()}))}:null;
+    const saved={resolutionId:intent.resolutionId,choice:intent.choice,reviewed:intent.reviewed.map(s=>({playerId:s.playerId,revision:s.revision})),replacement};
+    return transaction(['drafts','sessions'],'readwrite',(tx,done,fail)=>{
+      const table=tx.objectStore('drafts'),r=table.get(operationId);
+      r.onsuccess=()=>{try{
+        const d=r.result;if(!d||!unaccepted(d))throw Error('This request is already accepted or resolved. Refresh recovery.');
+        if((d.recoveryIntent?.resolutionId||null)!==expectedRecoveryId)throw Error('Recovery changed in another tab. Review it again.');
+        if(saved.resolutionId===operationId)throw Error('Recovery needs its own stable ID');
+        const lease=tx.objectStore('sessions').get(leaseKey(d.identity));
+        lease.onsuccess=()=>{try{
+          if(lease.result?.until>Date.now())throw Error('An upload is in progress. Wait for it before confirming recovery.');
+          if(d.recoveryIntent)(d.recoveryHistory ||= []).push(d.recoveryIntent);
+          d.recoveryIntent=saved;d.status='recovering';d.confirmedAt=Date.now();delete d.lastError;delete d.failureKind;d.syncFailures=0;
+          table.put(d);done(d);
+        }catch(e){fail(e);}};
+      }catch(e){fail(e);}};
+    });
+  }
+  async function finishRecovery(operationId,result) {
+    if(result.outcome==='original-accepted')return accept(operationId,result.scores);
+    return transaction(['drafts','snapshots'],'readwrite',(tx,done,fail)=>{
+      const drafts=tx.objectStore('drafts'),r=drafts.get(operationId);
+      r.onsuccess=()=>{try{
+        const d=r.result,intent=d?.recoveryIntent;
+        if(!intent||!['kept-server','replacement-accepted'].includes(result.outcome)||result.operationId!==intent.resolutionId)throw Error('Recovery acknowledgement does not match the saved decision');
+        if(d.status==='resolved'){done(d);return;}
+        const scores=result.scores;
+        if(!Array.isArray(scores)||new Set(scores.map(s=>String(s.player_id))).size!==scores.length)throw Error('Incomplete recovery acknowledgement; keep the saved request');
+        for(const score of scores)if(score.event_id!==d.identity.eventId||Number(score.hole)!==d.request.hole||!d.request.scores.some(s=>String(s.playerId)===String(score.player_id))||!Number.isInteger(score.revision)||score.revision<1)throw Error('Recovery returned scores outside this request');
+        if(intent.choice==='local') {
+          if(scores.length!==intent.replacement.scores.length)throw Error('Incomplete recovery acknowledgement');
+          for(const item of intent.replacement.scores) {
+            const accepted=scores.find(s=>String(s.player_id)===String(item.playerId));
+            if(!accepted||accepted.gross!==item.gross||accepted.score_status!==item.status||accepted.revision<item.expectedRevision)throw Error('Recovered scores do not match the confirmed choice');
+          }
+        }else for(const item of intent.reviewed) {
+          const accepted=scores.find(s=>String(s.player_id)===String(item.playerId));
+          if((accepted?.revision||0)!==item.revision)throw Error('Server values changed during recovery. Review again.');
+        }
+        const snapshots=tx.objectStore('snapshots'),all=snapshots.getAll();
+        all.onsuccess=()=>{try{
+          for(const snapshot of all.result) {
+            if(!['backend','eventId','groupNo'].every(k=>snapshot.identity[k]===d.identity[k]))continue;
+            for(const accepted of scores) {
+              const i=snapshot.acceptedScores.findIndex(s=>String(s.player_id)===String(accepted.player_id)&&Number(s.hole)===Number(accepted.hole));
+              if(i<0)snapshot.acceptedScores.push(clone(accepted));else if(snapshot.acceptedScores[i].revision<=accepted.revision)snapshot.acceptedScores[i]=clone(accepted);
+            }
+            snapshots.put(snapshot);
+          }
+          d.status='resolved';d.resolvedAt=Date.now();d.resolution={outcome:result.outcome,operationId:result.operationId,scores:clone(scores)};delete d.lastError;delete d.failureKind;drafts.put(d);done(d);
         }catch(e){fail(e);}};
       }catch(e){fail(e);}};
     });
@@ -209,5 +268,5 @@
     });
   }
   root.V2Local={identity,key,sessionKey,putSession,getSession:(b,e,g)=>read('sessions',sessionKey(b,e,g)),removeSession,
-    lease,getDraft:id=>read('drafts',id),prepare,updateCompetition,getSnapshot:value=>read('snapshots',key(value)),saveDraft,markSending,accept,problem,noteFailure,pending,recovery,forget};
+    lease,getDraft:id=>read('drafts',id),prepare,updateCompetition,getSnapshot:value=>read('snapshots',key(value)),saveDraft,markSending,accept,problem,noteFailure,beginRecovery,finishRecovery,pending,recovery,forget};
 })(globalThis);
