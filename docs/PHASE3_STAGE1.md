@@ -1,6 +1,6 @@
 # Phase 3 Stage 1: private-host and physical Safari feasibility
 
-Status: **in progress; physical Safari preparation has failed; offline acceptance is blocked pending diagnosis. Stage 2 has not started.**
+Status: **Stage 1 feasibility passed for the scoped diagnostic on the existing private host, based on the owner’s physical iPad/Safari checks completed 2026-11-03. Stage 2 has not started and awaits review of these results.**
 
 ## Confirmed by inspection
 
@@ -42,14 +42,35 @@ The mobile page reports secure context/API availability, worker response MIME/CS
 
 ## First physical Safari observation and diagnostic v2
 
-On 2026-11-02 the owner opened the protected diagnostic in iPad Safari. The report showed secure context and Service Worker/IndexedDB/Cache APIs available; normal page fetch of the worker returned HTTP 200 with `text/javascript`. No Service-Worker-Allowed or CSP response header was visible on that fetch (absence alone is not a restriction). Preparation timed out, and subsequent checks showed no registered active worker, no controller, no dummy marker and no cached assets. Private-page loading works in the existing signed-in session; a signed-out access-denial test has not yet been performed. These observations do not establish whether Safari, host authorization during worker requests, CSP, or installation code caused the failure. Do not label Stage 1 passed.
+On 2026-11-02 the owner opened the protected diagnostic in iPad Safari. The report showed secure context and Service Worker/IndexedDB/Cache APIs available; normal page fetch of the worker returned HTTP 200 with `text/javascript`. No Service-Worker-Allowed or CSP response header was visible on that fetch (absence alone is not a restriction). Preparation timed out, and subsequent checks showed no registered active worker, no controller, no dummy marker and no cached assets. At that point private-page loading worked in the signed-in session; a fresh-session access check had not yet been performed. These observations do not establish whether Safari, host authorization during worker requests, CSP, or installation code caused the failure. Those initial failed attempts were not a pass; the later v3 results below supersede them.
 
 The original diagnostic also lacked a reliable failure trace: it could miss a worker becoming redundant and report only a generic timeout. Diagnostic v2 records registration/updatefound/state changes, worker-side asset status/type and installation errors, page-side asset preflights and CSP events. Worker messages are restricted to diagnostic clients and no cookies, credentials or response bodies enter the report. Scope and cache allowlists are unchanged.
 
-`npm run test:offline-feasibility` uses a LOCAL HTTP protected fixture, not the real Site: Chromium successfully installs, reloads offline, reopens a tab offline with its marker, excludes an app-root control page from the worker, and cleans up only diagnostic storage. A simulated worker-context-only 403 produces an explicit traced install failure. WebKit is run if installed; local Chromium success does not prove actual private Sites/Safari compatibility. Physical preparation must be retried using diagnostic v2 before any offline action or Stage 2.
+`npm run test:offline-feasibility` uses a LOCAL HTTP protected fixture, not the real Site: Chromium successfully installs, reloads offline, reopens a tab offline with its marker, excludes an app-root control page from the worker, and cleans up only diagnostic storage. A simulated worker-context-only 403 produces an explicit traced install failure. WebKit is run if installed; local Chromium success does not prove actual private Sites/Safari compatibility. At that point physical preparation needed a new attempt before any offline action. V3 corrected the canonical-path issue and was subsequently tested below.
 
 ## Canonical-path correction (diagnostic v3)
 
 The owner confirmed Safari's actual page URL is `/offline-feasibility/`: the host canonicalizes the supplied `index.html` URL to that directory. In v2 the failure was before registration, during its first redirect-rejecting page-asset preflight. The original worker fetched the same non-canonical index path, consistent with the earlier empty-cache installation failure. This is a diagnostic path assumption, not evidence that the host forbids workers.
 
-V3 fetches and caches the canonical directory URL while continuing to reject authentication redirects. Its fetch handler accepts only the canonical diagnostic document, the known index alias (served from the same cached document), and the diagnostic JS. It still cannot intercept the golf app or broader paths. The report includes `page_path`. The local fixture now performs an index-to-directory 308 and explicitly demonstrates the old redirect-error rejection before testing successful install, offline reload and tab reopening. Actual private-host Safari preparation/reopening is still pending; Stage 2 remains paused.
+V3 fetches and caches the canonical directory URL while continuing to reject authentication redirects. Its fetch handler accepts only the canonical diagnostic document, the known index alias (served from the same cached document), and the diagnostic JS. It still cannot intercept the golf app or broader paths. The report includes `page_path`. The local fixture now performs an index-to-directory 308 and explicitly demonstrates the old redirect-error rejection before testing successful install, offline reload and tab reopening. Actual private-host Safari preparation/reopening subsequently passed with v3, as recorded below; Stage 2 remains paused for results review.
+
+## Final physical iPad/Safari observations — completed 2026-11-03
+
+The owner performed these actions on the physical iPad and reported their outcomes in chat. No remote device telemetry or exported device report was obtained; the offline conditions and displayed PASS results are user-observed, not inferred from chat connectivity.
+
+| Check | Observed outcome |
+| --- | --- |
+| Diagnostic v3 Prepare while online | Prepared successfully |
+| Online reload followed by Check | PASS: installed/active worker, controlled diagnostic, cached assets and retained dummy marker |
+| Airplane Mode on and Wi-Fi off; reload diagnostic | Page loaded; Check passed |
+| Still offline; close tab, open a new tab at the canonical URL | Page reopened; Check passed |
+| Still offline; leave Safari, lock iPad, unlock and resume Safari | Check passed |
+| Restore connectivity; open diagnostic in Safari Private Browsing without signing in | Prompted to sign in with ChatGPT |
+
+The signed-out check establishes an authentication prompt for a fresh Safari context, not a multi-user account authorization audit. Sites access metadata independently confirms the unchanged owner-only policy. The controlled diagnostic and its cached dummy data demonstrate scoped worker/cache/IndexedDB feasibility on this host/device, not a guarantee that all site data survives OS eviction or a proof of durable golf-score storage.
+
+**Finding:** no confirmed private-host blocker remains for this narrow feasibility case after using the canonical route. No provider switch, new environment or public access is needed for Stage 2 planning. Root app-shell scope/update behavior remains a later implementation/test gate. Safari background execution after closure is neither relied on nor promised.
+
+Only diagnostic assets and their dedicated dummy storage were used. The worker remains restricted to `/offline-feasibility/`; golf application assets, scores, credentials, Google resources, production and main are unchanged. The diagnostic can remain for evidence or be removed later using its scoped cleanup; never clear all Safari data to remove it.
+
+**Review gate:** do not start Stage 2 until these findings and limitations have been reviewed and the user gives the go-ahead. Stage 2 will implement real transactional IndexedDB writes/local drafts, immediate advance only after transaction completion, pending-data recovery/export safeguards, and acceptance-state UI. It must not claim server acceptance or enable Finish Group while queued scores lack server acceptance. Durable synchronization/outbox reconciliation, app-wide offline boot, and broader offline acceptance remain separately sequenced stages of the approved architecture.
