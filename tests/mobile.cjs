@@ -45,7 +45,7 @@ async function scenario(browser,name,viewport){
       return route.fulfill({status:200,contentType:'application/json',headers:{'access-control-allow-origin':'*'},body:JSON.stringify(result)});
     }
     const path=new URL(url).pathname;
-    if(url.startsWith('http://flaghunters.test/')&&['/','/index.html','/v2.js','/v2.css','/app-icon.PNG'].includes(path))return route.fulfill({status:200,contentType:path.endsWith('.js')?'text/javascript':path.endsWith('.css')?'text/css':path.endsWith('.PNG')?'image/png':'text/html',body:fs.readFileSync(path==='/'?'index.html':path.slice(1))});
+    if(url.startsWith('http://flaghunters.test/')&&['/','/index.html','/v2.js','/v2-local.js','/v2.css','/app-icon.PNG'].includes(path))return route.fulfill({status:200,contentType:path.endsWith('.js')?'text/javascript':path.endsWith('.css')?'text/css':path.endsWith('.PNG')?'image/png':'text/html',body:fs.readFileSync(path==='/'?'index.html':path.slice(1))});
     throw Error('Unexpected network request '+url);
   });
   page.on('dialog',d=>d.accept());
@@ -88,8 +88,12 @@ async function scenario(browser,name,viewport){
   await page.locator('#score-p1').getByRole('button',{name:'Revision history'}).tap();await page.locator('#v2Dialog').getByText('Corrected pickup entry',{exact:true}).waitFor();assert.ok((await page.locator('#v2Dialog').innerText()).includes('scorer'));await page.locator('#v2Close').click();
   // Simulate other holes already accepted, then finish and edit using the real interface.
   for(let hole=2;hole<=17;hole++)assert.equal(h.save({hole,scores:[1,2,3,4].map(i=>({playerId:'p'+i,status:'pickup',gross:null,expectedRevision:0}))}).ok,true);
+  // The fixture wrote those holes outside this tab; refresh the accepted local snapshot.
+  await page.getByRole('button',{name:'Reload scores',exact:true}).tap();
   await page.locator('#v2Hole').selectOption('17');
   for(const button of await page.locator('.v2-pickup').all())await button.tap();
+  await page.getByRole('button',{name:'Save this hole',exact:true}).tap();
+  await page.locator('#scoreMessage').filter({hasText:'Saved to server.'}).waitFor();
   await page.getByRole('button',{name:'Finish Group',exact:true}).tap();await page.locator('#completeScreen.active').waitFor();
   assert.equal(h.ctx.getGroupStatus('v2-event').length,1);
   await page.getByRole('button',{name:'Edit Scores',exact:true}).tap();await page.locator('#scoreScreen.active').waitFor();

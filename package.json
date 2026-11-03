@@ -1,10 +1,14 @@
 {
   "name": "flag-hunters-v2",
   "private": true,
-  "devDependencies": {"playwright": "1.62.1"},
+  "devDependencies": {
+    "fake-indexeddb": "6.2.7",
+    "playwright": "1.62.1"
+  },
   "scripts": {
     "test": "node --test tests/*.test.cjs",
     "test:mobile": "node tests/mobile.cjs",
+    "test:local-drafts": "node tests/local-drafts.browser.cjs",
     "test:offline-feasibility": "node tests/offline-feasibility.browser.cjs",
     "package:backend": "node scripts/package-backend.cjs"
   }

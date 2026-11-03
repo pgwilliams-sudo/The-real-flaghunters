@@ -1,6 +1,6 @@
 # Phase 3 Stage 1: private-host and physical Safari feasibility
 
-Status: **Stage 1 feasibility passed for the scoped diagnostic on the existing private host, based on the owner’s physical iPad/Safari checks completed 2026-11-03. Stage 2 has not started and awaits review of these results.**
+Status: **Stage 1 feasibility passed for the scoped diagnostic on the existing private host, based on the owner’s physical iPad/Safari checks completed 2026-11-03. Stage 1 results were subsequently reviewed and Stage 2 authorized; see PHASE3_STAGE2.md for the new implementation status.**
 
 ## Confirmed by inspection
 
@@ -74,3 +74,5 @@ The signed-out check establishes an authentication prompt for a fresh Safari con
 Only diagnostic assets and their dedicated dummy storage were used. The worker remains restricted to `/offline-feasibility/`; golf application assets, scores, credentials, Google resources, production and main are unchanged. The diagnostic can remain for evidence or be removed later using its scoped cleanup; never clear all Safari data to remove it.
 
 **Review gate:** do not start Stage 2 until these findings and limitations have been reviewed and the user gives the go-ahead. Stage 2 will implement real transactional IndexedDB writes/local drafts, immediate advance only after transaction completion, pending-data recovery/export safeguards, and acceptance-state UI. It must not claim server acceptance or enable Finish Group while queued scores lack server acceptance. Durable synchronization/outbox reconciliation, app-wide offline boot, and broader offline acceptance remain separately sequenced stages of the approved architecture.
+
+The user approved beginning Stage 2 after this report. The [Stage 2 report](PHASE3_STAGE2.md) records its separate scope, tests and remaining gates; the diagnostic observations here remain unchanged.

@@ -57,3 +57,6 @@ dialog input, dialog textarea { width:100%; box-sizing:border-box; margin:10px 0
 .v2-leaderboard tbody tr:hover,.v2-leaderboard tbody tr:focus { background:#e5eee6; outline:2px solid #826000; outline-offset:-2px; }
 .v2-leaderboard abbr { text-decoration:none; }
 .v2-table-stb { font-weight:750; }
+
+.v2-local-status { max-width:600px; margin:12px auto; padding:12px 16px; border:1px solid #647667; border-radius:10px; background:#f2f6f2; box-sizing:border-box; }
+.v2-local-status button { margin:4px; padding:8px; }

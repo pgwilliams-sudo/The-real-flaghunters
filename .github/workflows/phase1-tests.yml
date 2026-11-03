@@ -18,3 +18,4 @@ jobs:
       - run: npm test
       - run: npx playwright install --with-deps chromium webkit
       - run: npm run test:mobile
+      - run: npm run test:local-drafts
