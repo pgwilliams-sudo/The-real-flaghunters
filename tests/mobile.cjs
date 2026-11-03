@@ -45,7 +45,7 @@ async function scenario(browser,name,viewport){
       return route.fulfill({status:200,contentType:'application/json',headers:{'access-control-allow-origin':'*'},body:JSON.stringify(result)});
     }
     const path=new URL(url).pathname;
-    if(url.startsWith('http://flaghunters.test/')&&['/','/index.html','/v2.js','/v2-local.js','/v2.css','/app-icon.PNG'].includes(path))return route.fulfill({status:200,contentType:path.endsWith('.js')?'text/javascript':path.endsWith('.css')?'text/css':path.endsWith('.PNG')?'image/png':'text/html',body:fs.readFileSync(path==='/'?'index.html':path.slice(1))});
+    if(url.startsWith('http://flaghunters.test/')&&['/','/index.html','/v2.js','/v2-local.js','/v2-sync.js','/v2.css','/app-icon.PNG'].includes(path))return route.fulfill({status:200,contentType:path.endsWith('.js')?'text/javascript':path.endsWith('.css')?'text/css':path.endsWith('.PNG')?'image/png':'text/html',body:fs.readFileSync(path==='/'?'index.html':path.slice(1))});
     throw Error('Unexpected network request '+url);
   });
   page.on('dialog',d=>d.accept());

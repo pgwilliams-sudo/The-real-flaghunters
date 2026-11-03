@@ -3,7 +3,7 @@
   'use strict';
   const state={admin:'',group:'',meta:null,pending:null,dirty:false};
   const rawGet=apiGet,rawPost=apiPost,local=V2Local;
-  const localState={identity:null,snapshot:null,competitions:null,inflight:new Map(),saving:false,finishing:false};
+  const localState={identity:null,snapshot:null,competitions:null,saving:false,finishing:false};
   const escape=escapeHtml;
   function id() { return crypto.randomUUID ? crypto.randomUUID() : Array.from(crypto.getRandomValues(new Uint8Array(24)),x=>x.toString(16).padStart(2,'0')).join(''); }
   function modal(title,body) {
@@ -55,12 +55,12 @@
     return {meta:snapshot.meta,course:snapshot.course,groups:snapshot.group,scores};
   }
   const recoveryPanel=document.createElement('section');recoveryPanel.className='v2-local-status';
-  recoveryPanel.innerHTML='<strong>Device saves</strong><p id="v2LocalSummary" role="status">Checking local storage…</p><button id="v2ReviewLocal">Review / export local scores</button><button id="v2ForgetLocal">Forget this prepared round</button>';
+  recoveryPanel.innerHTML='<strong>Device saves</strong><p id="v2LocalSummary" role="status">Checking local storage…</p><button id="v2RetryLocal">Retry synchronization</button><button id="v2ReviewLocal">Review / export local scores</button><button id="v2ForgetLocal">Forget this prepared round</button>';
   document.body.prepend(recoveryPanel);
   async function refreshLocalStatus() {
     try {
       const pending=await local.pending();
-      document.getElementById('v2LocalSummary').textContent=pending.length?`${pending.length} saved hole request(s) await server acceptance. They remain on this device.`:'No local scores are awaiting server acceptance.';
+      document.getElementById('v2LocalSummary').textContent=pending.length?`${pending.length} saved hole request(s) await server acceptance. ${pending.filter(d=>d.status==='syncing').length} syncing; ${pending.filter(d=>d.status==='needs-review').length} need review. They remain on this device.`:'No local scores are awaiting server acceptance.';
     }catch(error){document.getElementById('v2LocalSummary').textContent='Local storage unavailable. Scoring cannot claim a device save: '+error.message;}
   }
   async function exportLocal() {
@@ -69,7 +69,7 @@
   }
   function recoveryDialog(message='') {
     return local.pending().then(pending=>{
-      const d=modal('Local score recovery',`<p>${escape(message||'Saved requests stay on this device after reloads or failed responses. To retry a saved hole, reopen its group and tap Save this hole. Automatic syncing is not available yet.')}</p>${pending.map(d=>`<p>Group ${d.identity.groupNo} · hole ${d.request.hole} · ${escape(({local:'Saved on this device','awaiting-server':'Awaiting server acceptance','needs-review':'Needs review'})[d.status]||d.status)}${d.lastError?' · '+escape(d.lastError):''}</p>`).join('')}<p>The recovery file includes private group scores and correction reasons. Keep it private. It contains no bearer tokens, PINs or admin password.</p><button id="v2ExportLocal">Export recovery file</button>`);
+      const d=modal('Local score recovery',`<p>${escape(message||'Saved requests stay on this device after reloads or failed responses. Automatic synchronization runs in order with available group credentials. Use Retry synchronization to retry unchanged requests; conflicts and unavailable original credentials need review. No requests are discarded or submitted under a different identity.')}</p>${pending.map(d=>`<p>Group ${d.identity.groupNo} · hole ${d.request.hole} · ${escape(({local:'Saved on this device','awaiting-server':'Awaiting server acceptance',syncing:'Syncing','needs-review':'Needs review'})[d.status]||d.status)}${d.lastError?' · '+escape(d.lastError):''}</p>`).join('')}<p>The recovery file includes private group scores and correction reasons. Keep it private. It contains no bearer tokens, PINs or admin password.</p><button id="v2ExportLocal">Export recovery file</button>`);
       d.querySelector('#v2ExportLocal').onclick=()=>exportLocal().catch(error=>alert(error.message));
     }).catch(error=>alert(error.message));
   }
@@ -159,7 +159,7 @@
       try{localState.competitions=await apiGet('competitions',{eventId:currentEvent.event_id});}catch(error){if(!localState.snapshot||error.name!=='TypeError')throw error;}
       const boot=await apiPost({action:'roundBootstrap',eventId:currentEvent.event_id,groupNo:Number(groupNo)});
       state.meta=boot.meta;course=boot.course;allGroups=boot.groups;allScores=boot.scores;
-      await originalSelect(groupNo);await refreshLocalStatus();
+      await originalSelect(groupNo);await refreshLocalStatus();void synchronize({force:true});
     }catch(error){alert(error.message);}
   };
   function resultSplits(p) {
@@ -273,36 +273,48 @@
       modal('Immutable revision history',result.history.map(c=>`<article class="v2-history-entry"><strong>Revision ${Number(c.after.revision)}: ${escape(display(c.before))} → ${escape(display(c.after))}</strong><p>${escape(c.reason)}</p><p>${escape(c.actor.role)} · ${escape(c.actor.credential_id)}</p><time>${escape(c.after.updated_at)}</time></article>`).join('')||'<p>No revisions.</p>');
     }catch(err){alert(err.message);}
   }
-  async function submitDraft(draft,credential) {
-    if(localState.inflight.has(draft.operationId))return localState.inflight.get(draft.operationId);
-    const task=(async()=>{
-      try {
-        if(credential.split('.')[0]!==draft.identity.credentialId)throw Error('Stored request belongs to a different credential; retain/export it for review');
-        await local.markSending(draft.operationId);
-        const result=await rawPost({...draft.request,operationId:draft.operationId,credential});
-        await local.accept(draft.operationId,result.scores||[]);
-        if(localState.identity&&local.key(localState.identity)===draft.scope) {
-          allScores=(await projection(draft.identity)).scores;
-          if(Number(holeOrder[holeIndex])===draft.request.hole&&!state.dirty){renderScoring();showMessage('scoreMessage','Saved to server.','good');}
-          else if(!state.dirty)showMessage('scoreMessage','Hole '+draft.request.hole+' accepted by server.','good');
+  const sync=V2Sync.create({local,backend:API_URL,transport:rawPost,
+    credential:async who=>{
+      if(who.backend!==API_URL)return null;
+      const tokens=[];
+      if(localState.identity?.eventId===who.eventId&&localState.identity?.groupNo===who.groupNo)tokens.push(state.admin,state.group);
+      const cached=await local.getSession(who.backend,who.eventId,who.groupNo);
+      if(cached?.expires_at>Date.now())tokens.push(cached.token);
+      const token=tokens.find(t=>t&&t.split('.')[0]===who.credentialId)||tokens.find(Boolean);
+      return token?{token}:null;
+    },
+    onChange:async(draft,error)=>{
+      if(localState.identity&&local.key(localState.identity)===draft.scope) {
+        allScores=(await projection(draft.identity)).scores;
+        if(error&&/permanently locked/i.test(error.message)) {
+          state.meta.locked=true;
+          const snapshot=await local.getSnapshot(draft.identity);
+          localState.snapshot=await local.prepare(draft.identity,{meta:state.meta,course:snapshot.course,groups:snapshot.group,scores:snapshot.acceptedScores,competitions:snapshot.competitions});
+          renderScoring();
         }
-      }catch(error){
-        try{await local.problem(draft.operationId,error.message);}catch(storageError){document.getElementById('v2LocalSummary').textContent='Local acknowledgement failed; preserve/export recovery data. '+storageError.message;}
-        if(localState.identity&&local.key(localState.identity)===draft.scope) {
-          if(/permanently locked/i.test(error.message)) {
-            state.meta.locked=true;
-            const snapshot=await local.getSnapshot(draft.identity);
-            localState.snapshot=await local.prepare(draft.identity,{meta:state.meta,course:snapshot.course,groups:snapshot.group,scores:snapshot.acceptedScores,competitions:snapshot.competitions});
-            renderScoring();
-          }
-          showMessage('scoreMessage','Saved on this device; server acceptance unconfirmed: '+error.message+'. The stored request is retained.','bad');
+        // A response must not erase an unsaved selection on the next hole.
+        if(!state.dirty) {
+          const record=await local.getDraft(draft.operationId);
+          if(Number(holeOrder[holeIndex])===draft.request.hole)renderScoring();
+          showMessage('scoreMessage',error?'Saved on this device; server acceptance unconfirmed: '+error.message+'. The stored request is retained.':
+            record.status==='accepted'?'Saved to server.':'Syncing saved scores; retained on this device.',error?'bad':record.status==='accepted'?'good':'info');
         }
-      }finally{localState.inflight.delete(draft.operationId);await refreshLocalStatus();await finishGate();}
-    })();localState.inflight.set(draft.operationId,task);return task;
+      }
+      await refreshLocalStatus();await finishGate();
+    }
+  });
+  function synchronize(options) {
+    return sync.kick(options).catch(error=>{
+      document.getElementById('v2LocalSummary').textContent='Synchronization needs attention; stored requests are retained. '+error.message;
+    });
   }
+  document.getElementById('v2RetryLocal').onclick=()=>synchronize({force:true,review:true});
+  window.addEventListener('online',()=>synchronize({force:true}));
+  window.addEventListener('pageshow',()=>synchronize({force:true}));
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')synchronize({force:true});});
   async function persist(advance) {
     if(localState.saving||!localState.identity)return;
-    const who=localState.identity,credential=state.admin||state.group,hole=Number(holeOrder[holeIndex]);
+    const who=localState.identity,hole=Number(holeOrder[holeIndex]);
     const controls=Array.from(document.querySelectorAll('#scoreScreen button,#scoreScreen select,#scoreScreen textarea')).map(el=>[el,el.disabled]);
     localState.saving=true;controls.forEach(([el])=>el.disabled=true);
     try {
@@ -324,8 +336,8 @@
         else holeIndex++;
       }
       renderScoring();showMessage('scoreMessage',note,'info');await refreshLocalStatus();
-      // One immediate attempt for this user save. No startup/reconnect queue draining.
-      void submitDraft(draft,credential).catch(error=>{document.getElementById('v2LocalSummary').textContent='Recovery needs attention; stored requests have not been cleared. '+error.message;});
+      // Queue dispatch is detached from the confirmed local save and advancement.
+      void synchronize({force:draft.attempts>0,review:draft.status==='needs-review'});
     }catch(error){showMessage('scoreMessage','Not saved on this device: '+error.message,'bad');}
     finally{localState.saving=false;controls.forEach(([el,disabled])=>{if(el.isConnected)el.disabled=disabled;});await finishGate();}
   }
@@ -377,5 +389,6 @@
     }catch(err){document.getElementById('v2ConnectionStatus').textContent=err.message;}
   };
   refreshLocalStatus();
+  void synchronize({force:true});
   if(API_URL) initialise();
 })();

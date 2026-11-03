@@ -253,6 +253,25 @@ function v2Save(data,actor) {
     return result;
   });
 }
+/** Authenticated reconciliation of an immutable request, including after reveal/rotation.
+ * Only accepted journal intents are recovered; this never creates a new score operation.
+ */
+function v2OperationStatus(data,actor) {
+  return withScriptLock(()=>{
+    const eventId=String(data.eventId||'');
+    v2Scope(actor,eventId,(data.scores||[]).map(s=>s.playerId),data.groupNo);
+    if(!/^[a-zA-Z0-9_-]{16,100}$/.test(String(data.operationId||'')))throw Error('A stable operation ID is required');
+    const prior=v2Rows('ScoreOperations').find(r=>r.operation_id===data.operationId);
+    if(!prior)return {ok:true,state:'ABSENT'};
+    const p=JSON.parse(prior.data);
+    if(p.event_id!==eventId)throw Error('Operation does not authorize this round');
+    v2Scope(actor,eventId,p.result.scores.map(s=>s.player_id));
+    const hash=v2Hash(JSON.stringify({eventId,hole:Number(data.hole),scores:data.scores}));
+    if(hash!==p.request_hash)throw Error('Operation ID reused with different request');
+    v2Recover(eventId);
+    return {ok:true,state:'COMMITTED',result:p.result};
+  });
+}
 function doGet(e) {
   try {
     const p=(e&&e.parameter)||{},action=p.action||'status',eventId=String(p.eventId||'');
@@ -284,6 +303,7 @@ function doPost(e) {
     }
     if(action==='openGroup') return jsonResponse(v2OpenGroup(data));
     const actor=v2Auth(data.credential);
+    if(action==='operationStatus')return jsonResponse(v2OperationStatus(data,actor));
     if(action==='revealResults') return jsonResponse(v2RevealResults(data,actor));
     if(action==='adminCompetitionData') {v2Admin(actor);return jsonResponse({ok:true,...getCompetitionData(data.eventId)});}
 

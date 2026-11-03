@@ -1,6 +1,6 @@
 # Phase 3 Stage 2: transactional local drafts
 
-Implemented on development/v2; not deployed. Stage 1's physical iPad/Safari feasibility passed, but that does not verify these new app behaviors on a physical device. Stages 3–6 have not begun.
+Historical implementation report at 93e3821. Subsequently deployed only to the existing private isolated Site and accepted by the owner in physical iPad/Safari testing on 2026-11-03. Stage 3 is separately documented in PHASE3_STAGE3.md. Stage 1's physical iPad/Safari feasibility passed, but that does not verify these new app behaviors on a physical device. At the Stage 2 implementation boundary, Stages 3–6 had not begun.
 
 ## Delivered scope
 

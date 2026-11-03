@@ -7,31 +7,34 @@ async function fixture(browser,{fillOtherHoles=false,processBeforeHold=false}={}
   if(fillOtherHoles)for(let hole=2;hole<=18;hole++)assert.equal(h.save({hole,scores:[1,2,3,4].map(i=>({playerId:'p'+i,status:'pickup',gross:null,expectedRevision:0}))}).ok,true);
   const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,acceptDownloads:true});
   await context.addInitScript(url=>localStorage.setItem('flaghunters.v2.api',url),endpoint);
-  const requests=[],errors=[];let hold=false,release;
+  const requests=[],errors=[];let hold=false,release,offline=false;
   const gate=new Promise(resolve=>release=resolve);
   await context.route('**/*',async route=>{
     const req=route.request(),url=req.url();
     if(url.startsWith(endpoint)) {
+      if(offline&&req.method()==='POST'&&['saveHoleScores','operationStatus'].includes(JSON.parse(req.postData()).action))return route.abort('internetdisconnected');
       let data,result;if(req.method()==='POST'){data=JSON.parse(req.postData());requests.push(data);if(data.action==='saveHoleScores'&&hold){if(processBeforeHold)result=h.post(data);await gate;}}
       result ||= data?h.post(data):h.ctx.doGet({parameter:Object.fromEntries(new URL(url).searchParams)});
       try{await route.fulfill({status:200,contentType:'application/json',headers:{'access-control-allow-origin':'*'},body:JSON.stringify(result)});}catch(_){} // A reloaded tab may abandon its response.
       return;
     }
     const path=new URL(url).pathname;
-    if(url.startsWith(origin)&&['/','/index.html','/v2-local.js','/v2.js','/v2.css','/app-icon.PNG'].includes(path))return route.fulfill({status:200,contentType:path.endsWith('.js')?'text/javascript':path.endsWith('.css')?'text/css':path.endsWith('.PNG')?'image/png':'text/html',body:fs.readFileSync(path==='/'?'index.html':path.slice(1))});
+    if(url.startsWith(origin)&&['/','/index.html','/v2-local.js','/v2-sync.js','/v2.js','/v2.css','/app-icon.PNG'].includes(path))return route.fulfill({status:200,contentType:path.endsWith('.js')?'text/javascript':path.endsWith('.css')?'text/css':path.endsWith('.PNG')?'image/png':'text/html',body:fs.readFileSync(path==='/'?'index.html':path.slice(1))});
     if(path==='/favicon.ico')return route.fulfill({status:204,body:''});
     throw Error('Unexpected external request '+url);
   });
-  async function page() {const p=await context.newPage();p.on('pageerror',e=>errors.push(e.message));p.on('dialog',d=>d.accept());await p.goto(origin);return p;}
+  async function page() {const p=await context.newPage();p.setDefaultTimeout(15000);p.on('pageerror',e=>errors.push(e.message));p.on('dialog',d=>d.accept());await p.goto(origin);return p;}
   async function openGroup(p) {
     await p.getByRole('button',{name:/Enter Scores/}).click();await p.locator('.group-button').first().click();
     if(!requests.some(r=>r.action==='openGroup')) {await p.locator('#v2Code').fill(h.groupPin);await p.getByRole('button',{name:'Open group',exact:true}).click();}
     await p.locator('#scoreScreen.active').waitFor();
   }
-  return {h,context,requests,errors,page,openGroup,hold:()=>{hold=true;},release:()=>{hold=false;release();}};
+  return {h,context,requests,errors,page,openGroup,offline:value=>{offline=value;},hold:()=>{hold=true;},release:()=>{hold=false;release();}};
 }
 async function fillPickups(page){for(const button of await page.locator('.v2-pickup').all())await button.tap();}
-async function waitPending(page,count){await page.waitForFunction(async n=>(await V2Local.pending()).length===n,count);}
+async function browserWait(page,fn,arg){const end=Date.now()+15000;while(!await page.evaluate(fn,arg)){if(Date.now()>end)throw Error('Browser state observation timed out');await new Promise(r=>setTimeout(r,10));}}
+async function waitPending(page,count){await browserWait(page,async n=>(await V2Local.pending()).length===n,count);}
+async function observe(predicate) {const end=Date.now()+5000;while(!predicate()){if(Date.now()>end)throw Error('Fixture observation timed out');await new Promise(r=>setTimeout(r,10));}}
 async function scenario(browser,label) {
   // Slow response proves durable-first advancement, reload recovery and Finish gating.
   let f=await fixture(browser,{fillOtherHoles:true});
@@ -39,21 +42,24 @@ async function scenario(browser,label) {
     let page=await f.page();await f.openGroup(page);f.hold();await fillPickups(page);
     await page.locator('#nextButton').tap();await page.waitForFunction(()=>holeIndex===1);
     await waitPending(page,1);
+    await observe(()=>f.requests.some(r=>r.action==='saveHoleScores'));
     assert.equal(f.h.ctx.getScores('v2-event').filter(s=>s.hole===1).length,0,'advance must occur while server has not accepted anything');
     const saved=await page.evaluate(async()=>{const d=(await V2Local.pending())[0];return {id:d.operationId,body:JSON.stringify(d.request)};});
     await page.locator('#v2Hole').selectOption('17');assert.equal(await page.locator('#nextButton').isDisabled(),true);
     const refused=await page.evaluate(()=>apiPost({action:'completeGroup',eventId:currentEvent.event_id,groupNo:1}).then(()=>null,error=>error.message));assert.match(refused,/server acceptance/);
     assert.equal(f.requests.some(r=>r.action==='completeGroup'),false);
-    await page.close();page=await f.page();await f.openGroup(page);await waitPending(page,1);
+    await page.close();await f.context.addInitScript(()=>{const now=Date.now;Date.now=()=>now()+61000;});page=await f.page();await f.openGroup(page);await waitPending(page,1);
     assert.equal(f.requests.filter(r=>r.action==='openGroup').length,1,'trusted session must survive tab closure without another PIN');
-    assert.equal(f.requests.filter(r=>r.action==='saveHoleScores').length,1,'Stage 2 must not automatically replay queues after reopen');
+    await browserWait(page,async()=>(await V2Local.pending())[0]?.attempts>=2);
+    await observe(()=>f.requests.filter(r=>r.action==='saveHoleScores').length>=2);
+    assert.equal(f.requests.filter(r=>r.action==='saveHoleScores').length,2,'Stage 3 resumes the ordered queue after the expired tab lease');
     const restored=await page.evaluate(async()=>{const d=(await V2Local.pending())[0];return {id:d.operationId,body:JSON.stringify(d.request)};});assert.deepEqual(restored,saved);
     await page.locator('#v2ForgetLocal').click();await page.locator('#v2Dialog[open]').getByText(/cannot be cleared/).waitFor();
     const downloadPromise=page.waitForEvent('download');await page.locator('#v2ExportLocal').click();const download=await downloadPromise;
     const recovery=fs.readFileSync(await download.path(),'utf8');assert.ok(recovery.includes(saved.id));assert.equal(recovery.includes(f.h.group),false);assert.equal(recovery.includes(f.h.properties.V2_ADMIN_SECRET),false);
     await page.locator('#v2Close').click();await waitPending(page,1);
     await page.locator('#v2Hole').selectOption('0');await page.getByRole('button',{name:'Save this hole',exact:true}).click();
-    await page.waitForFunction(async()=>{const d=(await V2Local.pending())[0];return d?.attempts>=2;});
+    await browserWait(page,async()=>{const d=(await V2Local.pending())[0];return d?.attempts>=2;});
     f.release();await waitPending(page,0);await page.locator('#scoreMessage').filter({hasText:'Saved to server.'}).waitFor();
     assert.equal(f.requests.filter(r=>r.action==='saveHoleScores').length,2);assert.ok(f.requests.filter(r=>r.action==='saveHoleScores').every(r=>r.operationId===saved.id));
     const history=f.h.ctx.v2Rows('ScoreHistory').map(r=>JSON.parse(r.data)).filter(c=>c.after.hole===1);assert.equal(history.length,4,'lost response/retry must not create duplicate history');
@@ -67,15 +73,38 @@ async function scenario(browser,label) {
   try {
     let page=await f.page();await f.openGroup(page);f.hold();await fillPickups(page);await page.locator('#nextButton').tap();
     await page.waitForFunction(()=>holeIndex===1);await waitPending(page,1);
-    await page.waitForFunction(async()=>(await V2Local.pending())[0]?.attempts===1);
+    await browserWait(page,async()=>(await V2Local.pending())[0]?.attempts===1);
+    await observe(()=>f.h.ctx.getScores('v2-event').length===4);
     assert.equal(f.h.ctx.getScores('v2-event').length,4);
-    await page.close();page=await f.page();await f.openGroup(page);await page.locator('#v2Hole').selectOption('0');
-    await page.getByRole('button',{name:'Save this hole',exact:true}).tap();
-    await page.waitForFunction(async()=>(await V2Local.pending())[0]?.attempts===2);
-    f.release();await waitPending(page,0);
+    await page.close();await f.context.addInitScript(()=>{const now=Date.now;Date.now=()=>now()+61000;});page=await f.page();await f.openGroup(page);
+    await waitPending(page,0);f.release();
+    assert.equal(f.requests.filter(r=>r.action==='saveHoleScores').length,1,'accepted lost response is reconciled without another write');
     assert.equal(f.h.ctx.v2Rows('ScoreHistory').length,4);assert.equal(f.h.ctx.getScores('v2-event')[0].revision,1);
-    assert.deepEqual(f.errors,[]);console.log('PASS '+label+': lost accepted response replays unchanged after a refreshed server revision');
+    assert.deepEqual(f.errors,[]);console.log('PASS '+label+': lost accepted response reconciles without another mutation after refreshed server revision');
   }finally{f.release();await f.context.close();}
+  // Foreground reconnect/resume/manual Retry drains a synthetic interrupted connection.
+  for(const trigger of ['online','resume','manual']) {
+    f=await fixture(browser);
+    try {
+      const page=await f.page();await f.openGroup(page);f.offline(true);
+      await fillPickups(page);await page.locator('#nextButton').tap();await page.waitForFunction(()=>holeIndex===1);
+      await browserWait(page,async()=>(await V2Local.pending())[0]?.lastError);
+      await fillPickups(page);await page.locator('#nextButton').tap();await page.waitForFunction(()=>holeIndex===2);
+      await waitPending(page,2);
+      // Start a next-hole selection: late acceptance must not clear it or advance again.
+      await page.locator('.v2-pickup').first().tap();
+      f.offline(false);
+      if(trigger==='online')await page.evaluate(()=>window.dispatchEvent(new Event('online')));
+      else if(trigger==='resume')await page.evaluate(()=>{Object.defineProperty(document,'visibilityState',{configurable:true,value:'visible'});document.dispatchEvent(new Event('visibilitychange'));});
+      else await page.locator('#v2RetryLocal').tap();
+      await waitPending(page,0);
+      const writes=f.requests.filter(r=>r.action==='saveHoleScores');
+      assert.deepEqual(writes.map(d=>d.hole),[1,2]);
+      assert.equal(await page.evaluate(()=>holeIndex),2);assert.equal(await page.locator('#display-p1').textContent(),'BLOB');
+      assert.equal(f.h.ctx.v2Rows('ScoreHistory').length,8);assert.deepEqual(f.errors,[]);
+      console.log('PASS '+label+': '+trigger+' drains offline saves in order and preserves next-hole selection');
+    }finally{await f.context.close();}
+  }
   // Any local group/credential queue for the round blocks completion, not just the current scope.
   f=await fixture(browser,{fillOtherHoles:true});
   try {
@@ -119,5 +148,5 @@ async function scenario(browser,label) {
 (async()=>{
  const chrome=await chromium.launch({executablePath:process.env.CHROMIUM_PATH||(fs.existsSync('/usr/bin/chromium')?'/usr/bin/chromium':chromium.executablePath()),headless:true,args:['--no-sandbox']});try{await scenario(chrome,'Chromium phone');}finally{await chrome.close();}
  if(fs.existsSync(webkit.executablePath())){const safari=await webkit.launch({headless:true});try{await scenario(safari,'WebKit phone');}finally{await safari.close();}}
- else console.log('LIMITATION: WebKit unavailable; physical Safari Stage 2 verification remains pending.');
+ else console.log('LIMITATION: WebKit unavailable locally; Stage 3 has no physical Safari validation yet.');
 })().catch(error=>{console.error(error);process.exitCode=1;});

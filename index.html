@@ -1379,13 +1379,14 @@ async function apiGet(
 
 
 
-async function apiPost(data) {
+async function apiPost(data, options = {}) {
 
   const response =
     await fetch(
       API_URL,
       {
         method: 'POST',
+        signal: options.signal,
 
         headers: {
           'Content-Type':
@@ -1396,6 +1397,8 @@ async function apiPost(data) {
           JSON.stringify(data)
       }
     );
+
+  if (!response.ok) throw new Error('HTTP ' + response.status);
 
   const result =
     await response.json();
@@ -6046,6 +6049,7 @@ async function saveAdminPinCorrection() {
 
   
 <script src="v2-local.js"></script>
+<script src="v2-sync.js"></script>
 <script src="v2.js"></script>
 </body>
 

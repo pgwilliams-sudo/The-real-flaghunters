@@ -1,4 +1,4 @@
-/* Phase 3 Stage 2: local transactions/drafts only. No network or background sync. */
+/* Durable local storage. Network synchronization lives in v2-sync.js. */
 ((root) => {
   'use strict';
   const NAME='flaghunters-v2-local',VERSION=1;
@@ -70,7 +70,22 @@
     const ids=new Set(group.map(p=>String(p.player_id)));
     const snapshot={key:key(who),identity:who,meta:clone(data.meta),course:clone(data.course),group,
       acceptedScores:clone(data.scores.filter(s=>String(s.event_id)===who.eventId&&ids.has(String(s.player_id)))),competitions:clone(data.competitions||{}),preparedAt:Date.now()};
-    return transaction(['snapshots'],'readwrite',(tx,done)=>{tx.objectStore('snapshots').put(snapshot);done(snapshot);});
+    return transaction(['snapshots'],'readwrite',(tx,done,fail)=>{
+      const table=tx.objectStore('snapshots'),r=table.get(snapshot.key);
+      r.onsuccess=()=>{try{
+        // A slow bootstrap may have been fetched before a queue acknowledgement.
+        // Accepted revisions and a known permanent reveal lock must never regress.
+        const previous=r.result;
+        for(const accepted of previous?.acceptedScores||[]) {
+          if(!ids.has(String(accepted.player_id)))continue;
+          const index=snapshot.acceptedScores.findIndex(s=>String(s.player_id)===String(accepted.player_id)&&Number(s.hole)===Number(accepted.hole));
+          if(index<0)snapshot.acceptedScores.push(accepted);
+          else if((accepted.revision||0)>(snapshot.acceptedScores[index].revision||0))snapshot.acceptedScores[index]=accepted;
+        }
+        if(previous?.meta?.locked||previous?.meta?.revealed_at)snapshot.meta={...snapshot.meta,locked:true,revealed_at:previous.meta.revealed_at};
+        table.put(snapshot);done(snapshot);
+      }catch(e){fail(e);}};
+    });
   }
   async function updateCompetition(value,competitions) {
     return transaction(['snapshots'],'readwrite',(tx,done,fail)=>{
@@ -113,24 +128,31 @@
           validate(snapshot,request);
           const draft={operationId,scope,identity:who,request,fingerprint,status:'local',createdAt:Date.now(),attempts:0};
           // add, not put: a duplicate ID must never overwrite another saved request.
-          drafts.add(draft);done(draft);
+          const all=drafts.getAll();
+          all.onsuccess=()=>{try{draft.sequence=1+all.result.reduce((n,d)=>Math.max(n,d.sequence||0),0);drafts.add(draft);done(draft);}catch(e){fail(e);}};
         }catch(e){fail(e);}};
       }catch(e){fail(e);}};
     });
   }
-  async function markSending(operationId) {
+  async function markSending(operationId,submission=true) {
     return transaction(['drafts'],'readwrite',(tx,done,fail)=>{
       const table=tx.objectStore('drafts'),r=table.get(operationId);r.onsuccess=()=>{try{
         const d=r.result;if(!d||d.status==='accepted')throw Error('Local request not pending');
-        d.status='awaiting-server';d.attempts++;d.lastAttemptAt=Date.now();table.put(d);done(d);
+        d.status='syncing';if(submission)d.attempts++;d.lastAttemptAt=Date.now();table.put(d);done(d);
       }catch(e){fail(e);}};
     });
   }
-  async function problem(operationId,message) {
+  async function problem(operationId,message,{retryable=false,nextAttemptAt=0}={}) {
     return transaction(['drafts'],'readwrite',(tx,done)=>{
       const table=tx.objectStore('drafts'),r=table.get(operationId);r.onsuccess=()=>{
-        const d=r.result;if(d&&unaccepted(d)){d.status='needs-review';d.lastError=String(message);table.put(d);}done(d);
+        const d=r.result;if(d&&unaccepted(d)){d.status=retryable?'local':'needs-review';d.nextAttemptAt=nextAttemptAt;d.lastError=String(message);table.put(d);}done(d);
       };
+    });
+  }
+  async function noteFailure(operationId,count) {
+    return transaction(['drafts'],'readwrite',(tx,done)=>{
+      const table=tx.objectStore('drafts'),r=table.get(operationId);
+      r.onsuccess=()=>{const d=r.result;if(d&&unaccepted(d)){d.syncFailures=count;table.put(d);}done(d);};
     });
   }
   async function accept(operationId,scores) {
@@ -155,7 +177,20 @@
       }catch(e){fail(e);}};
     });
   }
-  async function pending(filter={}) {return (await all('drafts')).filter(d=>unaccepted(d)&&matches(d.identity,filter)).sort((a,b)=>a.createdAt-b.createdAt||a.operationId.localeCompare(b.operationId));}
+  async function pending(filter={}) {return (await all('drafts')).filter(d=>unaccepted(d)&&matches(d.identity,filter)).sort((a,b)=>(a.sequence||0)-(b.sequence||0)||a.createdAt-b.createdAt||a.operationId.localeCompare(b.operationId));}
+  // Cross-tab group lease, kept out of recovery exports with bearer sessions.
+  const leaseKey=who=>'sync:'+JSON.stringify([who.backend,who.eventId,who.groupNo]);
+  async function lease(who,owner,now,release=false) {
+    return transaction(['sessions'],'readwrite',(tx,done)=>{
+      const table=tx.objectStore('sessions'),id=leaseKey(who),r=table.get(id);
+      r.onsuccess=()=>{
+        const prior=r.result;
+        if(release){if(prior?.owner===owner)table.delete(id);done(true);return;}
+        if(prior&&prior.owner!==owner&&prior.until>now){done(false);return;}
+        table.put({key:id,owner,until:now+60000});done(true);
+      };
+    });
+  }
   async function recovery(filter={}) {
     // Sessions/bearer tokens are deliberately excluded from recovery exports.
     return {format:'flaghunters-local-recovery',version:VERSION,exportedAt:new Date().toISOString(),
@@ -174,5 +209,5 @@
     });
   }
   root.V2Local={identity,key,sessionKey,putSession,getSession:(b,e,g)=>read('sessions',sessionKey(b,e,g)),removeSession,
-    prepare,updateCompetition,getSnapshot:value=>read('snapshots',key(value)),saveDraft,markSending,accept,problem,pending,recovery,forget};
+    lease,getDraft:id=>read('drafts',id),prepare,updateCompetition,getSnapshot:value=>read('snapshots',key(value)),saveDraft,markSending,accept,problem,noteFailure,pending,recovery,forget};
 })(globalThis);
