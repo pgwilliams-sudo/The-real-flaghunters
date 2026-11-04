@@ -7,7 +7,7 @@ async function fixture(browser,{fillOtherHoles=false,processBeforeHold=false}={}
   if(fillOtherHoles)for(let hole=2;hole<=18;hole++)assert.equal(h.save({hole,scores:[1,2,3,4].map(i=>({playerId:'p'+i,status:'pickup',gross:null,expectedRevision:0}))}).ok,true);
   const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,acceptDownloads:true});
   await context.addInitScript(url=>localStorage.setItem('flaghunters.v2.api',url),endpoint);
-  const requests=[],errors=[];let hold=false,release,offline=false,loseRecovery=false;
+  const requests=[],errors=[];let hold=false,release,offline=false,loseRecovery=false,malformedHistory=false;
   const gate=new Promise(resolve=>release=resolve);
   await context.route('**/*',async route=>{
     const req=route.request(),url=req.url();
@@ -15,7 +15,8 @@ async function fixture(browser,{fillOtherHoles=false,processBeforeHold=false}={}
       if(offline&&req.method()==='POST'&&['saveHoleScores','operationStatus','resolveOperation','reviewOperation'].includes(JSON.parse(req.postData()).action))return route.abort('internetdisconnected');
       let data,result;if(req.method()==='POST'){data=JSON.parse(req.postData());requests.push(data);if(data.action==='saveHoleScores'&&hold){if(processBeforeHold)result=h.post(data);await gate;}}
       result ||= data?h.post(data):h.ctx.doGet({parameter:Object.fromEntries(new URL(url).searchParams)});
-      if(loseRecovery&&data?.action==='resolveOperation'){loseRecovery=false;offline=true;return route.abort('connectionclosed');}
+      if(malformedHistory&&data?.action==='scoreHistory')result={ok:true};
+      if(loseRecovery&&data?.action==='resolveOperation'){loseRecovery=false,malformedHistory=false;offline=true;return route.abort('connectionclosed');}
       try{await route.fulfill({status:200,contentType:'application/json',headers:{'access-control-allow-origin':'*'},body:JSON.stringify(result)});}catch(_){} // A reloaded tab may abandon its response.
       return;
     }
@@ -30,7 +31,7 @@ async function fixture(browser,{fillOtherHoles=false,processBeforeHold=false}={}
     if(!requests.some(r=>r.action==='openGroup')) {await p.locator('#v2Code').fill(h.groupPin);await p.getByRole('button',{name:'Open group',exact:true}).click();}
     await p.locator('#scoreScreen.active').waitFor();
   }
-  return {h,context,requests,errors,page,openGroup,offline:value=>{offline=value;},loseRecovery:()=>{loseRecovery=true;},hold:()=>{hold=true;},release:()=>{hold=false;release();}};
+  return {h,context,requests,errors,page,openGroup,offline:value=>{offline=value;},loseRecovery:()=>{loseRecovery=true;},malformedHistory:value=>{malformedHistory=value;},hold:()=>{hold=true;},release:()=>{hold=false;release();}};
 }
 async function fillPickups(page){for(const button of await page.locator('.v2-pickup').all())await button.tap();}
 async function browserWait(page,fn,arg){const end=Date.now()+15000;while(!await page.evaluate(fn,arg)){if(Date.now()>end)throw Error('Browser state observation timed out');await new Promise(r=>setTimeout(r,10));}}
@@ -119,14 +120,15 @@ async function scenario(browser,label) {
     await page.locator('#v2ReviewLocal').tap();await page.locator('[data-review-operation]').tap();
     await page.getByRole('heading',{name:'Review score conflict'}).waitFor();
     assert.equal(await page.locator('.v2-use-local:checked').count(),0,'never preselect an overwrite');
+    await page.evaluate(()=>{window.confirm=()=>{throw Error('Recovery must not call native confirm');};});
     await page.locator('.v2-recovery-entry').first().getByText('Server accepted:',{exact:false}).waitFor();
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false,'recovery has no horizontal page overflow');
     await page.locator('.v2-use-local').first().check();await page.locator('#v2RecoveryReason').fill('Reviewed phone BLOB correction');f.loseRecovery();
-    await page.locator('#v2ResubmitLocal').tap();
+    await page.locator('#v2ResubmitLocal').tap();await page.locator('#v2RecoveryConfirmSubmit').tap();
     await browserWait(page,async()=>(await V2Local.pending())[0]?.lastError);
     const pending=await page.evaluate(()=>V2Local.pending()),savedId=pending[0].recoveryIntent.resolutionId;
     assert.equal(f.h.ctx.v2Rows('ScoreHistory').length,5,'server accepted exactly one selected correction before response loss');
-    await page.close();page=await f.page();await f.openGroup(page);f.offline(false);
+    await page.close();await f.context.addInitScript(()=>{const now=Date.now;Date.now=()=>now()+61000;});page=await f.page();await f.openGroup(page);f.offline(false);
     await page.locator('#v2RetryLocal').tap();await waitPending(page,0);
     const records=await page.evaluate(()=>V2Local.recovery()),resolved=records.drafts.find(d=>d.recoveryIntent?.resolutionId===savedId);
     assert.equal(resolved.status,'resolved');assert.equal(f.h.ctx.v2Rows('ScoreHistory').length,5);
@@ -153,9 +155,53 @@ async function scenario(browser,label) {
     await page.locator('#v2ReviewLocal').tap();await page.locator('[data-review-operation]').tap();
     await page.getByRole('heading',{name:'Review score conflict'}).waitFor();
     for(const checkbox of await page.locator('.v2-use-local').all())await checkbox.check();
-    await page.locator('#v2RecoveryReason').fill('Explicit renewed group session');await page.locator('#v2ResubmitLocal').tap();await waitPending(page,0);
+    await page.locator('#v2RecoveryReason').fill('Explicit renewed group session');await page.locator('#v2ResubmitLocal').tap();await page.locator('#v2RecoveryConfirmSubmit').tap();await waitPending(page,0);
     assert.equal(f.h.ctx.v2Rows('ScoreHistory').length,4);assert.deepEqual(f.errors,[]);
     console.log('PASS '+label+': expired session pauses retries, reauthenticates and submits only after explicit review');
+  }finally{await f.context.close();}
+  // A stale comparison must stay safe without browser-native confirm/alert dialogs.
+  f=await fixture(browser);
+  try {
+    const page=await f.page();await f.openGroup(page);f.offline(true);
+    await fillPickups(page);await page.getByRole('button',{name:'Save this hole',exact:true}).tap();
+    await browserWait(page,async()=>(await V2Local.pending())[0]?.lastError);
+    f.h.save({scores:[1,2,3,4].map(i=>({playerId:'p'+i,status:'scored',gross:5,expectedRevision:0}))});
+    f.offline(false);await page.evaluate(()=>window.dispatchEvent(new Event('online')));
+    await browserWait(page,async()=>(await V2Local.pending())[0]?.failureKind==='conflict');
+    await page.locator('#v2ReviewLocal').tap();await page.locator('[data-review-operation]').tap();
+    await page.getByRole('heading',{name:'Review score conflict'}).waitFor();
+    await page.evaluate(()=>{window.confirm=()=>{throw Error('Native confirmation forbidden in recovery');};window.alert=()=>{throw Error('Native alert forbidden in recovery');};});
+    await page.locator('.v2-use-local').first().check();await page.locator('#v2RecoveryReason').fill('Reviewed BLOB confirmation');
+    await page.locator('#v2KeepServer').tap();await page.locator('#v2RecoveryConfirm').waitFor();
+    assert.equal(f.requests.filter(r=>r.action==='resolveOperation').length,0);
+    assert.equal((await page.evaluate(()=>V2Local.pending()))[0].recoveryIntent,undefined);
+    await page.locator('#v2RecoveryConfirmCancel').tap();assert.equal(await page.locator('.v2-use-local').first().isChecked(),true);
+    assert.equal(await page.locator('#v2RecoveryReason').inputValue(),'Reviewed BLOB confirmation');
+    assert.equal(f.h.save({scores:[{playerId:'p1',status:'scored',gross:6,expectedRevision:1,reason:'Other device changed after comparison'}]}).ok,true);
+    await page.locator('#v2ResubmitLocal').tap();await page.locator('#v2RecoveryConfirm').waitFor();
+    assert.equal(f.requests.filter(r=>r.action==='resolveOperation').length,0,'first click never commits a decision');
+    await page.locator('#v2RecoveryConfirmSubmit').evaluate(el=>{el.click();el.click();});
+    await browserWait(page,async()=>(await V2Local.pending())[0]?.lastError?.includes('changed again'));
+    assert.equal(f.h.ctx.v2Rows('ScoreHistory').length,5,'stale approval cannot overwrite the newer accepted score');
+    assert.equal(f.h.ctx.getScores('v2-event').find(s=>s.player_id==='p1').gross,6);
+    await page.locator('[data-review-operation]').tap();await page.getByRole('heading',{name:'Review score conflict'}).waitFor();
+    await page.locator('.v2-use-local').first().check();await page.locator('#v2RecoveryReason').fill('Fresh BLOB approval');
+    await page.locator('#v2ResubmitLocal').tap();await page.locator('#v2RecoveryConfirmSubmit').tap();await waitPending(page,0);
+    assert.equal(f.h.ctx.v2Rows('ScoreHistory').length,6);assert.equal(f.h.ctx.getScores('v2-event').find(s=>s.player_id==='p1').gross,null);
+    assert.deepEqual(f.errors,[]);console.log('PASS '+label+': in-page confirmation, cancel preservation, double-click protection and stale-review rejection without native dialogs');
+  }finally{await f.context.close();}
+  // Unexpected successful response shapes must not crash history or pretend it is empty.
+  f=await fixture(browser);
+  try {
+    f.h.save();const page=await f.page();await f.openGroup(page);await page.locator('#v2Hole').selectOption('0');
+    await page.evaluate(()=>{window.alert=()=>{throw Error('History error must use an in-page message');};});
+    f.malformedHistory(true);await page.locator('#score-p1').getByRole('button',{name:'Revision history',exact:true}).tap();
+    await page.getByRole('heading',{name:'Revision history unavailable'}).waitFor();await page.getByText(/response was incomplete/).waitFor();
+    assert.equal(f.h.ctx.v2Rows('ScoreHistory').length,1);assert.equal((await page.evaluate(()=>V2Local.pending())).length,0);
+    await page.locator('#v2Close').tap();f.malformedHistory(false);
+    await page.locator('#score-p1').getByRole('button',{name:'Revision history',exact:true}).tap();
+    await page.getByRole('heading',{name:'Immutable revision history'}).waitFor();assert.equal(await page.locator('.v2-history-entry').count(),1);
+    assert.deepEqual(f.errors,[]);console.log('PASS '+label+': malformed history response gives a safe in-page error and retry leaves scores/history intact');
   }finally{await f.context.close();}
   // Other rounds remain visible/exportable, receive no automatic traffic and do not
   // block completion of a fully server-accepted current round.

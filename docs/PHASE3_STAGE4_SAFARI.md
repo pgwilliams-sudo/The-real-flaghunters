@@ -2,6 +2,10 @@
 
 Prepared only. Obtain explicit approval for the concrete matching Stage 4 backend and frontend deployment before executing this plan. Stage 4 has not been physically validated. Stage 5 is not authorized.
 
+## Current blocker / next retest
+
+Physical acceptance on 2026-11-04 is paused after repeated blank-page behavior around selected-change resubmission. Preserve both device tabs and pending exports; do not repeat that path on the original frontend. The local frontend-only mitigation described in PHASE3_STAGE4.md requires deployment approval before physical retest. Its confirmation uses a second **Confirm selected changes / Confirm keep server values** button inside the page, not a native Safari popup. First verify that Back to review leaves the pending record and inputs intact; then repeat explicit selected BLOB recovery and the changed-after-review rejection test. Do not mark the blank-page problem resolved until this physical retest passes. No isolated Apps Script update is needed for the frontend mitigation.
+
 ## Environment and evidence
 
 - Reuse Site `appgprj_6ae88c84e7388191804ce879ca000a02`, owner-private, and the isolated **Flag Hunters V2 — iPad Isolated Test** Apps Script project. No production resources, additional Site, hosting/access changes or main merge.

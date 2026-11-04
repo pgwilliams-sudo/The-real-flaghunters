@@ -91,15 +91,36 @@
         const accepted=review.serverScores.find(s=>String(s.player_id)===String(item.playerId));
         const name=localState.snapshot?.group.find(p=>String(p.player_id)===String(item.playerId))?.player_name||item.playerId;
         return `<article class="v2-recovery-entry"><strong>${escape(name)}</strong><p>Server accepted: <b>${escape(value(accepted))}</b> · revision ${accepted?.revision||0}</p><p>Your pending change: <b>${escape(value(item))}</b></p>${item.reason?`<p>Original reason: ${escape(item.reason)}</p>`:''}<label><input type="checkbox" class="v2-use-local" value="${escape(item.playerId)}" ${locked?'disabled':''}> Use my pending change</label></article>`;
-      }).join('')}${locked?'<p role="alert">Final results are permanently locked. This request remains available for export; no resubmission is allowed.</p>':'<label for="v2RecoveryReason">Additional correction reason (original reasons are retained)</label><textarea id="v2RecoveryReason" maxlength="500" rows="2"></textarea><button id="v2KeepServer">Keep server values</button><button id="v2ResubmitLocal">Resubmit selected changes</button>'}<p id="v2RecoveryMessage" role="alert"></p>`);
+      }).join('')}${locked?'<p role="alert">Final results are permanently locked. This request remains available for export; no resubmission is allowed.</p>':'<label for="v2RecoveryReason">Additional correction reason (original reasons are retained)</label><textarea id="v2RecoveryReason" maxlength="500" rows="2"></textarea><button id="v2KeepServer">Keep server values</button><button id="v2ResubmitLocal">Resubmit selected changes</button><section id="v2RecoveryConfirm" hidden aria-labelledby="v2RecoveryConfirmTitle"><h3 id="v2RecoveryConfirmTitle">Confirm recovery decision</h3><p id="v2RecoveryConfirmText"></p><button id="v2RecoveryConfirmSubmit">Confirm decision</button><button id="v2RecoveryConfirmCancel">Back to review</button></section>'}<p id="v2RecoveryMessage" role="alert"></p>`);
       if(locked)return;
-      async function choose(choice) {
-        const selected=[...d.querySelectorAll('.v2-use-local:checked')].map(el=>el.value),reason=d.querySelector('#v2RecoveryReason').value;
-        if(!confirm(choice==='server'?'Keep the reviewed server values and archive this local change? The original request remains in your recovery export.':'Resubmit only the selected local changes against the displayed server revisions? Reasons and original history are retained.'))return;
-        d.querySelectorAll('button,input,textarea').forEach(el=>el.disabled=true);
-        try {await recovery.decide(review,choice,selected,reason,true);d.close();await synchronize({force:true,review:true,operationId});await refreshProjection();await recoveryDialog();}
-        catch(error){d.querySelector('#v2RecoveryMessage').textContent=friendly(error);d.querySelectorAll('button,input,textarea').forEach(el=>el.disabled=false);}
+      let decision=null,submitting=false;
+      const confirmation=d.querySelector('#v2RecoveryConfirm');
+      function editable(enabled) {
+        d.querySelectorAll('.v2-use-local,#v2RecoveryReason,#v2KeepServer,#v2ResubmitLocal').forEach(el=>el.disabled=!enabled);
       }
+      function choose(choice) {
+        if(submitting)return;
+        const selected=[...d.querySelectorAll('.v2-use-local:checked')].map(el=>el.value),reason=d.querySelector('#v2RecoveryReason').value;
+        if(choice==='local'&&!selected.length){d.querySelector('#v2RecoveryMessage').textContent='Select the local changes you want to resubmit.';return;}
+        // Freeze the reviewed choice before a separate explicit confirmation click.
+        // Avoid synchronous browser dialogs inside the HTML modal on physical Safari.
+        decision={choice,selected:[...selected],reason};editable(false);
+        const summary=choice==='server'?'Keep the reviewed server values and archive this local change. The original request remains in your recovery export.':
+          'Resubmit '+selected.length+' selected change(s) against the displayed server revisions. Original reasons/history are retained.';
+        d.querySelector('#v2RecoveryConfirmText').textContent=summary;
+        d.querySelector('#v2RecoveryConfirmSubmit').textContent=choice==='server'?'Confirm keep server values':'Confirm selected changes';
+        d.querySelector('#v2RecoveryMessage').textContent='';confirmation.hidden=false;
+        confirmation.scrollIntoView({block:'nearest'});d.querySelector('#v2RecoveryConfirmSubmit').focus({preventScroll:true});
+      }
+      d.querySelector('#v2RecoveryConfirmCancel').onclick=()=>{
+        if(submitting)return;decision=null;confirmation.hidden=true;editable(true);d.querySelector('#v2ResubmitLocal').focus();
+      };
+      d.querySelector('#v2RecoveryConfirmSubmit').onclick=async()=>{
+        if(!decision||submitting)return;
+        submitting=true;const approved=decision;d.querySelectorAll('button,input,textarea').forEach(el=>el.disabled=true);
+        try {await recovery.decide(review,approved.choice,approved.selected,approved.reason,true);d.close();await synchronize({force:true,review:true,operationId});await refreshProjection();await recoveryDialog();}
+        catch(error){submitting=false;decision=null;confirmation.hidden=true;d.querySelectorAll('button,input,textarea').forEach(el=>el.disabled=false);d.querySelector('#v2RecoveryMessage').textContent=friendly(error);}
+      };
       d.querySelector('#v2KeepServer').onclick=()=>choose('server');d.querySelector('#v2ResubmitLocal').onclick=()=>choose('local');
     }catch(error){await recoveryDialog(friendly(error));}
   }
@@ -303,9 +324,10 @@
   async function showHistory(playerId) {
     try {
       const result=await apiPost({action:'scoreHistory',eventId:currentEvent.event_id,playerId,hole:holeOrder[holeIndex]});
+      if(!Array.isArray(result?.history)||result.history.some(row=>!row?.after||!row.actor))throw Error('Revision history response was incomplete. No scores were changed. Close this panel and try again.');
       const display=s=>s ? (s.score_status==='pickup'?'BLOB':String(s.gross)):'Not scored';
       modal('Immutable revision history',result.history.map(c=>`<article class="v2-history-entry"><strong>Revision ${Number(c.after.revision)}: ${escape(display(c.before))} → ${escape(display(c.after))}</strong><p>${escape(c.reason)}</p><p>${escape(c.actor.role)} · ${escape(c.actor.credential_id)}</p><time>${escape(c.after.updated_at)}</time></article>`).join('')||'<p>No revisions.</p>');
-    }catch(err){alert(err.message);}
+    }catch(err){modal('Revision history unavailable',`<p role="alert">${escape(friendly(err))}</p>`);}
   }
   async function recoveryCredential(who) {
       if(who.backend!==API_URL)return null;

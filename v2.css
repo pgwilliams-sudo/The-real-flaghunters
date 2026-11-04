@@ -68,3 +68,7 @@ dialog input, dialog textarea { width:100%; box-sizing:border-box; margin:10px 0
 #v2Dialog textarea { box-sizing:border-box; width:100%; font:inherit; }
 .v2-recovery-entry label { display:flex; align-items:center; gap:10px; min-height:44px; }
 .v2-recovery-entry input[type=checkbox] { width:24px; height:24px; flex-shrink:0; }
+
+#v2RecoveryConfirm { border:2px solid #826000; border-radius:8px; padding:12px; margin:12px 0; background:#fff4d9; }
+#v2RecoveryConfirm[hidden] { display:none; }
+#v2RecoveryConfirm button { display:block; width:100%; margin:8px 0; }
