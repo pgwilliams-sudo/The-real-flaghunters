@@ -115,6 +115,21 @@ test('failed durable acknowledgement retains evidence then reconciles acceptance
   assert.equal(f.calls.filter(d=>d.action==='saveHoleScores').length,1);assert.equal(f.h.ctx.v2Rows('ScoreHistory').length,4);
   assert.equal((await f.local.getDraft(draft.operationId)).status,'accepted');sync.stop();
 });
+test('upload deadline after server commit retains the ID and reconciles on retry without duplicate history',async()=>{
+  const f=await fixture(),draft=await f.save();let signal;
+  const sync=f.create((data,options)=>{
+    if(data.action==='saveHoleScores'){f.h.post(data);signal=options.signal;return new Promise(()=>{});}
+    return f.h.post(data);
+  });
+  const task=sync.kick();while(!signal)await tick();
+  [...f.timers.values()].find(t=>t.delay===25000).fn();await task;
+  assert.equal(signal.aborted,true);assert.equal(f.h.ctx.v2Rows('ScoreHistory').length,4);
+  assert.equal((await f.local.pending())[0].operationId,draft.operationId);
+  await sync.kick({force:true});assert.equal((await f.local.pending()).length,0);
+  assert.equal(f.calls.filter(c=>c.action==='saveHoleScores').length,1);
+  assert.equal(f.calls.filter(c=>c.action==='operationStatus')[0].operationId,draft.operationId);
+  assert.equal(f.h.ctx.v2Rows('ScoreHistory').length,4);sync.stop();
+});
 test('Stage 2 network-failure records resume automatically, while rejected legacy records remain blocked',async()=>{
   for(const [message,accepted] of [['Load failed',true],['Score changed on another device. Reload before correcting.',false]]) {
     const f=await fixture(),draft=await f.save();await f.local.markSending(draft.operationId);await f.local.problem(draft.operationId,message);

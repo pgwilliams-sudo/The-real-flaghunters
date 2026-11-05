@@ -21,7 +21,7 @@ async function fixture(browser,{fillOtherHoles=false,processBeforeHold=false}={}
       return;
     }
     const path=new URL(url).pathname;
-    if(url.startsWith(origin)&&['/','/index.html','/v2-local.js','/v2-sync.js','/v2-recovery.js','/v2.js','/v2.css','/app-icon.PNG'].includes(path))return route.fulfill({status:200,contentType:path.endsWith('.js')?'text/javascript':path.endsWith('.css')?'text/css':path.endsWith('.PNG')?'image/png':'text/html',body:fs.readFileSync(path==='/'?'index.html':path.slice(1))});
+    if(url.startsWith(origin)&&['/','/index.html','/v2-local.js','/v2-sync.js','/v2-recovery.js','/v2-offline.js','/v2.js','/v2.css','/app-icon.PNG'].includes(path))return route.fulfill({status:200,contentType:path.endsWith('.js')?'text/javascript':path.endsWith('.css')?'text/css':path.endsWith('.PNG')?'image/png':'text/html',body:fs.readFileSync(path==='/'?'index.html':path.slice(1))});
     if(path==='/favicon.ico')return route.fulfill({status:204,body:''});
     throw Error('Unexpected external request '+url);
   });
@@ -259,9 +259,9 @@ async function scenario(browser,label) {
     const page=await f.page();await f.openGroup(page);
     const row=f.h.sheets.get('RoundEventsV2').rows[1],meta=JSON.parse(row[1]);meta.locked=true;meta.revealed_at='external-test-reveal';row[1]=JSON.stringify(meta);
     await fillPickups(page);await page.getByRole('button',{name:'Save this hole',exact:true}).tap();
-    await page.locator('#scoreMessage').filter({hasText:/acceptance unconfirmed.*permanently locked/}).waitFor();
+    await page.locator('#scoreMessage').filter({hasText:/Final results are permanently locked.*no resubmission/}).waitFor();
     const pending=await page.evaluate(()=>V2Local.pending());assert.equal(pending.length,1);assert.equal(pending[0].status,'needs-review');
-    assert.equal(f.h.ctx.getScores('v2-event').length,0);assert.ok(await page.locator('.v2-locked').count());
+    assert.equal(f.h.ctx.getScores('v2-event').length,0);assert.equal(await page.locator('.v2-locked').count(),1);await page.evaluate(()=>renderScoring());assert.equal(await page.locator('.v2-locked').count(),1);await page.locator('#v2LocalSummary').filter({hasText:/permanently locked.*no resubmission/}).waitFor();
     await page.locator('#v2ReviewLocal').click();await page.locator('#v2ExportLocal').waitFor();
     assert.deepEqual(f.errors,[]);console.log('PASS '+label+': post-reveal rejection keeps pending recovery data and disables scoring');
   }finally{await f.context.close();}
@@ -269,5 +269,5 @@ async function scenario(browser,label) {
 (async()=>{
  const chrome=await chromium.launch({executablePath:process.env.CHROMIUM_PATH||(fs.existsSync('/usr/bin/chromium')?'/usr/bin/chromium':chromium.executablePath()),headless:true,args:['--no-sandbox']});try{await scenario(chrome,'Chromium phone');}finally{await chrome.close();}
  if(fs.existsSync(webkit.executablePath())){const safari=await webkit.launch({headless:true});try{await scenario(safari,'WebKit phone');}finally{await safari.close();}}
- else console.log('LIMITATION: WebKit unavailable locally; Stage 4 has no physical Safari validation yet.');
+ else console.log('LIMITATION: WebKit unavailable locally; this automated run provides no physical Safari evidence.');
 })().catch(error=>{console.error(error);process.exitCode=1;});

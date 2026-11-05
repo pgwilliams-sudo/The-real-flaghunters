@@ -3,6 +3,7 @@
   'use strict';
   const id=()=>root.crypto.randomUUID?root.crypto.randomUUID():Array.from(root.crypto.getRandomValues(new Uint8Array(24)),x=>x.toString(16).padStart(2,'0')).join('');
   function message(error) {
+    if(/permanently locked/i.test(error.message))return 'Final results are permanently locked. Pending requests remain available for export; no resubmission is allowed.';
     if(error.name==='QuotaExceededError')return 'Device storage is full. This action was not completed. Keep existing scores and export a recovery copy.';
     if(error.name==='AbortError')return 'Recovery was interrupted. Saved requests are retained. Use Retry synchronization when ready.';
     if(/credential|session.*expired/i.test(error.message))return 'Scoring access expired or changed. Open this group and sign in with its current PIN, then review or retry. Saved scores remain on this device.';

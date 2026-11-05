@@ -69,13 +69,14 @@
     if(!group.length)throw Error('Cannot prepare an empty group');
     const ids=new Set(group.map(p=>String(p.player_id)));
     const snapshot={key:key(who),identity:who,meta:clone(data.meta),course:clone(data.course),group,
-      acceptedScores:clone(data.scores.filter(s=>String(s.event_id)===who.eventId&&ids.has(String(s.player_id)))),competitions:clone(data.competitions||{}),preparedAt:Date.now()};
+      acceptedScores:clone(data.scores.filter(s=>String(s.event_id)===who.eventId&&ids.has(String(s.player_id)))),competitions:clone(data.competitions||{}),event:clone(data.event||{event_id:who.eventId}),preparedAt:Date.now()};
     return transaction(['snapshots'],'readwrite',(tx,done,fail)=>{
       const table=tx.objectStore('snapshots'),r=table.get(snapshot.key);
       r.onsuccess=()=>{try{
         // A slow bootstrap may have been fetched before a queue acknowledgement.
         // Accepted revisions and a known permanent reveal lock must never regress.
         const previous=r.result;
+        if(!data.event&&previous?.event)snapshot.event=previous.event;
         for(const accepted of previous?.acceptedScores||[]) {
           if(!ids.has(String(accepted.player_id)))continue;
           const index=snapshot.acceptedScores.findIndex(s=>String(s.player_id)===String(accepted.player_id)&&Number(s.hole)===Number(accepted.hole));
@@ -267,6 +268,10 @@
       }catch(e){fail(e);}};
     });
   }
-  root.V2Local={identity,key,sessionKey,putSession,getSession:(b,e,g)=>read('sessions',sessionKey(b,e,g)),removeSession,
+  async function prepared(backend,now=Date.now()) {
+    const [sessions,snapshots]=await Promise.all([all('sessions'),all('snapshots')]);
+    return snapshots.filter(s=>s.identity.backend===backend&&sessions.some(a=>a.backend===backend&&a.eventId===s.identity.eventId&&a.groupNo===s.identity.groupNo&&a.credentialId===s.identity.credentialId&&a.expires_at>now));
+  }
+  root.V2Local={prepared,identity,key,sessionKey,putSession,getSession:(b,e,g)=>read('sessions',sessionKey(b,e,g)),removeSession,
     lease,getDraft:id=>read('drafts',id),prepare,updateCompetition,getSnapshot:value=>read('snapshots',key(value)),saveDraft,markSending,accept,problem,noteFailure,beginRecovery,finishRecovery,pending,recovery,forget};
 })(globalThis);

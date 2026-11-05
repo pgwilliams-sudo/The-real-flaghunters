@@ -5,6 +5,7 @@
   const rawGet=apiGet,rawPost=apiPost,local=V2Local;
   const localState={identity:null,snapshot:null,competitions:null,saving:false,finishing:false};
   const escape=escapeHtml;
+  let localBootstrap=false;
   function id() { return crypto.randomUUID ? crypto.randomUUID() : Array.from(crypto.getRandomValues(new Uint8Array(24)),x=>x.toString(16).padStart(2,'0')).join(''); }
   function modal(title,body) {
     document.getElementById('v2Dialog')?.remove();
@@ -62,7 +63,7 @@
   async function refreshLocalStatus() {
     try {
       const pending=await local.pending(),current=pending.filter(currentRound),older=pending.length-current.length;
-      const count=current.length?`${current.length} saved hole request(s) await server acceptance for this round. ${current.filter(d=>d.status==='syncing').length} syncing; ${current.filter(d=>d.status==='needs-review').length} need review.`:'No local scores are awaiting server acceptance for this round.';
+      const count=(state.meta?.locked||state.meta?.revealed_at||currentEvent?.locked)?'Final results are permanently locked. '+current.length+' pending request(s) retained for review/export; no resubmission is allowed.':current.length?`${current.length} saved hole request(s) await server acceptance for this round. ${current.filter(d=>d.status==='syncing').length} syncing; ${current.filter(d=>d.status==='needs-review').length} need review.`:'No local scores are awaiting server acceptance for this round.';
       document.getElementById('v2LocalSummary').textContent=count+(older?` ${older} request(s) belong to other rounds/backends; retained for review/export and not automatically retried.`:'');
     }catch(error){document.getElementById('v2LocalSummary').textContent='Local storage unavailable. '+friendly(error);}
   }
@@ -149,7 +150,7 @@
     const accepted=localState.snapshot?.acceptedScores||[];
     const complete=selectedGroup.length>0&&selectedGroup.every(p=>Array.from({length:18},(_,i)=>i+1).every(h=>accepted.some(s=>String(s.player_id)===String(p.player_id)&&Number(s.hole)===h)));
     button.disabled=!!locked||localState.saving||localState.finishing||state.dirty||pending.length>0||!complete;
-    const hint=document.getElementById('v2FinishHint');if(hint)hint.textContent=pending.length?'Finish Group is unavailable until all local scores have server acceptance.':!complete||state.dirty?'Use Save this hole before finishing.':'';
+    const hint=document.getElementById('v2FinishHint');if(hint)hint.textContent=locked?'Final results are permanently locked. Pending requests remain available for export.':pending.length?'Finish Group is unavailable until all local scores have server acceptance.':!complete||state.dirty?'Use Save this hole before finishing.':'';
   }
   apiGet=async function(action,params) {
     if(!API_URL)throw Error('Connect a separate V2 test backend first.');
@@ -163,6 +164,8 @@
   };
   apiPost=async function(data) {
     if(!API_URL)throw Error('Connect a separate V2 test backend first.');
+    if(data.action==='roundBootstrap'&&localState.identity&&(localBootstrap||!navigator.onLine))return projection(localState.identity);
+    if(!navigator.onLine)throw Error('Offline. This action needs a server connection. Saved scores are retained.');
     if(data.action==='adminLogin') {
       const result=await rawPost(data);state.admin=result.token;document.getElementById('adminPin').value='';return result;
     }
@@ -179,7 +182,8 @@
     }
     if(data.action==='createEvent')course=(await rawGet('roundCourse',{eventId:result.event_id})).course;
     if(data.action==='roundBootstrap'&&localState.identity) {
-      localState.snapshot=await local.prepare(localState.identity,{...result,competitions:localState.competitions||{}});
+      localState.snapshot=await local.prepare(localState.identity,{...result,event:currentEvent,competitions:localState.competitions||{}});
+      state.meta=localState.snapshot.meta;
       return {...result,...await projection(localState.identity)};
     }
     if(data.action==='confirmGroupHandicaps'&&localState.identity&&result.groups) {
@@ -214,7 +218,7 @@
       try{localState.competitions=await apiGet('competitions',{eventId:currentEvent.event_id});}catch(error){if(!localState.snapshot||error.name!=='TypeError')throw error;}
       const boot=await apiPost({action:'roundBootstrap',eventId:currentEvent.event_id,groupNo:Number(groupNo)});
       state.meta=boot.meta;course=boot.course;allGroups=boot.groups;allScores=boot.scores;
-      await originalSelect(groupNo);await refreshLocalStatus();void synchronize({force:true,review:true});
+      await originalSelect(groupNo);await preparedGroups();await refreshLocalStatus();void synchronize({force:true,review:true});
     }catch(error){alert(error.message);}
   };
   function resultSplits(p) {
@@ -270,6 +274,7 @@
   renderScoring=function() {
     originalRender();
     document.getElementById('v2ScoreTools')?.remove();
+    document.querySelectorAll('.v2-locked').forEach(el=>el.remove());
     const tools=document.createElement('div');tools.id='v2ScoreTools';tools.className='v2-toolbar';
     const label=document.createElement('label');label.textContent='Edit hole ';const select=document.createElement('select');select.id='v2Hole';select.setAttribute('aria-label','Choose hole to edit');
     holeOrder.forEach((h,i)=>select.add(new Option('Hole '+h,i,false,i===holeIndex)));
@@ -351,7 +356,7 @@
           state.group='';
         }
         if(error&&/permanently locked/i.test(error.message)) {
-          state.meta.locked=true;
+          state.meta={...state.meta,locked:true};
           const snapshot=await local.getSnapshot(draft.identity);
           localState.snapshot=await local.prepare(draft.identity,{meta:state.meta,course:snapshot.course,groups:snapshot.group,scores:snapshot.acceptedScores,competitions:snapshot.competitions});
           renderScoring();
@@ -360,7 +365,7 @@
         if(!state.dirty) {
           const record=await local.getDraft(draft.operationId);
           if(Number(holeOrder[holeIndex])===draft.request.hole)renderScoring();
-          showMessage('scoreMessage',error?'Saved on this device; server acceptance unconfirmed: '+friendly(error)+'. The stored request is retained.':
+          showMessage('scoreMessage',error&&V2Sync.classify(error)==='locked'?friendly(error):error?'Saved on this device; server acceptance unconfirmed: '+friendly(error)+'. The stored request is retained.':
             ['accepted','resolved'].includes(record.status)?'Saved to server.':'Syncing saved scores; retained on this device.',error?'bad':['accepted','resolved'].includes(record.status)?'good':'info');
         }
       }
@@ -368,6 +373,7 @@
     }
   });
   function synchronize(options) {
+    if(!navigator.onLine)return refreshLocalStatus();
     return sync.kick(options).catch(error=>{
       document.getElementById('v2LocalSummary').textContent='Synchronization paused; stored requests are retained. '+friendly(error);
     });
@@ -378,7 +384,9 @@
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')synchronize({force:true});});
   async function persist(advance) {
     if(localState.saving||!localState.identity)return;
+    if(state.meta?.locked||state.meta?.revealed_at||currentEvent?.locked){showMessage('scoreMessage','Final results are permanently locked. Pending requests remain available for export.','bad');return;}
     const who=localState.identity,hole=Number(holeOrder[holeIndex]);
+    try{if(!state.admin){const session=await local.getSession(who.backend,who.eventId,who.groupNo);if(!session||session.expires_at<=Date.now()||session.credentialId!==who.credentialId)throw Error('Scoring access expired or changed. Reconnect and sign in again. Pending scores are retained.');}}catch(error){showMessage('scoreMessage','Not saved on this device: '+friendly(error),'bad');return;}
     const controls=Array.from(document.querySelectorAll('#scoreScreen button,#scoreScreen select,#scoreScreen textarea')).map(el=>[el,el.disabled]);
     localState.saving=true;controls.forEach(([el])=>el.disabled=true);
     try {
@@ -455,7 +463,32 @@
       localStorage.setItem('flaghunters.v2.api',value);location.reload();
     }catch(err){document.getElementById('v2ConnectionStatus').textContent=err.message;}
   };
-  refreshLocalStatus();
+  async function preparedGroups() {
+    const holder=document.getElementById('v2PreparedGroups');
+    try {
+      const snapshots=await local.prepared(API_URL);holder.replaceChildren();
+      if(!snapshots.length){holder.textContent='No authorized prepared groups found. If you prepared one before, storage may have been evicted or access expired. Reconnect to reopen it; missing pending scores cannot be recovered from this device.';return;}
+      for(const snapshot of snapshots){
+        const button=document.createElement('button');button.textContent='Reopen prepared round '+snapshot.identity.eventId+' · group '+snapshot.identity.groupNo;
+        button.onclick=async()=>{
+          try{
+            const who=snapshot.identity,session=await local.getSession(who.backend,who.eventId,who.groupNo);
+            if(!session||session.expires_at<=Date.now()||session.credentialId!==who.credentialId)throw Error('Prepared access expired. Reconnect and sign in again. Pending scores are retained.');
+            state.admin='';adminPinValue='';state.group=session.token;state.dirty=false;
+            currentEvent={...snapshot.event,event_id:who.eventId,locked:!!(snapshot.meta?.locked||snapshot.meta?.revealed_at)};
+            localState.identity=who;localState.snapshot=snapshot;localState.competitions=snapshot.competitions;
+            state.meta=snapshot.meta;course=snapshot.course;allGroups=snapshot.group;allPlayers=snapshot.group;allScores=(await projection(who)).scores;
+            localBootstrap=true;await originalSelect(who.groupNo);
+            showMessage('scoreMessage','Prepared group data from '+new Date(snapshot.preparedAt).toLocaleString()+'. May be stale; local scores await server acceptance. Final lock and access changes require a connection.','info');
+            await refreshLocalStatus();void synchronize({force:true});
+          }catch(error){modal('Prepared group unavailable','<p role="alert">'+escape(friendly(error))+'</p>');}
+          finally{localBootstrap=false;}
+        };holder.append(button);
+      }
+    }catch(error){holder.textContent='Local storage unavailable. '+friendly(error);}
+  }
+  window.addEventListener('pageshow',preparedGroups);
+  refreshLocalStatus();void preparedGroups();
   void synchronize({force:true});
   if(API_URL) Promise.resolve(initialise()).then(()=>{refreshLocalStatus();void synchronize({force:true});});
 })();
