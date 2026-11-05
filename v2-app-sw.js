@@ -1,6 +1,6 @@
 /* App shell only. Private sessions, scores and outbox live exclusively in IndexedDB. */
 'use strict';
-const VERSION='stage5-v1';
+const VERSION='stage5-v2';
 const BASE=new URL('./',self.location.href);
 const CACHE='flaghunters-app:'+BASE.pathname+':'+VERSION;
 const ASSETS=['','v2.css','v2-local.js','v2-sync.js','v2-recovery.js','v2-offline.js','v2.js','app-icon.PNG'];

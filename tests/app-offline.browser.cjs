@@ -9,7 +9,7 @@ async function run(browser,label){
     if(!['index.html','v2-app-sw.js','v2-offline.js','v2.js','v2-local.js','v2-sync.js','v2-recovery.js','v2.css','app-icon.PNG','dev/offline-feasibility/offline-probe-sw.js','dev/offline-feasibility/index.html','dev/offline-feasibility/probe.js'].includes(file)){res.writeHead(404);return res.end();}
     if(deny&&file==='v2.css'){res.writeHead(403);return res.end('denied');}
     res.writeHead(200,{'Content-Type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':file.endsWith('.PNG')?'image/png':'text/html','Cache-Control':'no-store'});
-    let content=fs.readFileSync(file);if(file==='v2-app-sw.js')content=content.toString().replace('stage5-v1','stage5-v'+version);
+    let content=fs.readFileSync(file);if(file==='v2-app-sw.js')content=content.toString().replace(/const VERSION='[^']+'/,"const VERSION='stage5-test-v"+version+"'");
     res.end(content);
   });
   await new Promise(r=>server.listen(0,'127.0.0.1',r));
