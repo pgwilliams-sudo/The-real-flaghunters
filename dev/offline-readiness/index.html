@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>V2 offline readiness — read-only</title>
+<style>body{font:17px system-ui,sans-serif;max-width:800px;margin:24px auto;padding:16px;color:#173c2d;background:#f4f7f4}button{font:inherit;padding:14px;margin:8px 0;display:block;width:100%;min-height:48px}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:white;padding:16px}p{line-height:1.5}</style>
+<h1>Offline readiness — read-only</h1>
+<p>This check reads worker states and cached static-asset metadata. It does not register, update or remove workers, change caches, inspect scores or credentials, or open IndexedDB. It is an online diagnostic page, outside the golf app’s offline asset list.</p>
+<p>An activated worker and a versioned cache are separate observations. The cache name alone does not prove which worker code is running.</p>
+<button id="check">Check worker and cached assets</button>
+<button id="export" disabled>Export diagnostic report</button>
+<p id="status" role="status">Ready. Leave pending scores untouched.</p>
+<pre id="report"></pre>
+<script src="check.js"></script>
+</html>

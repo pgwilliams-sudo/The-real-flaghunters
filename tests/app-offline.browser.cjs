@@ -5,8 +5,8 @@ async function run(browser,label){
   const h=harness(),events=h.sheets.get('Events').rows;events.push(events.splice(1,1)[0]);
   let version=1,deny=false,holdWrites=true;const calls=[];
   const server=http.createServer((req,res)=>{
-    const file=req.url==='/'?'index.html':req.url==='/offline-probe-sw.js'?'dev/offline-feasibility/offline-probe-sw.js':req.url==='/offline-feasibility/'?'dev/offline-feasibility/index.html':req.url==='/offline-feasibility/probe.js'?'dev/offline-feasibility/probe.js':req.url.slice(1);
-    if(!['index.html','v2-app-sw.js','v2-offline.js','v2.js','v2-local.js','v2-sync.js','v2-recovery.js','v2.css','app-icon.PNG','dev/offline-feasibility/offline-probe-sw.js','dev/offline-feasibility/index.html','dev/offline-feasibility/probe.js'].includes(file)){res.writeHead(404);return res.end();}
+    const file=req.url==='/offline-readiness/'?'dev/offline-readiness/index.html':req.url==='/offline-readiness/check.js'?'dev/offline-readiness/check.js':req.url==='/'?'index.html':req.url==='/offline-probe-sw.js'?'dev/offline-feasibility/offline-probe-sw.js':req.url==='/offline-feasibility/'?'dev/offline-feasibility/index.html':req.url==='/offline-feasibility/probe.js'?'dev/offline-feasibility/probe.js':req.url.slice(1);
+    if(!['index.html','v2-app-sw.js','v2-offline.js','v2.js','v2-local.js','v2-sync.js','v2-recovery.js','v2.css','app-icon.PNG','dev/offline-feasibility/offline-probe-sw.js','dev/offline-feasibility/index.html','dev/offline-feasibility/probe.js','dev/offline-readiness/index.html','dev/offline-readiness/check.js'].includes(file)){res.writeHead(404);return res.end();}
     if(deny&&file==='v2.css'){res.writeHead(403);return res.end('denied');}
     res.writeHead(200,{'Content-Type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':file.endsWith('.PNG')?'image/png':'text/html','Cache-Control':'no-store'});
     let content=fs.readFileSync(file);if(file==='v2-app-sw.js')content=content.toString().replace(/const VERSION='[^']+'/,"const VERSION='stage5-test-v"+version+"'");
@@ -60,6 +60,17 @@ async function run(browser,label){
     assert.equal(h.ctx.v2Rows('ScoreHistory').length,4);assert.deepEqual(errors,[]);
     assert.equal(await p.evaluate(()=>caches.has('flaghunters-stage1-feasibility-v1')),true);
     assert.equal(await p.evaluate(async()=>(await navigator.serviceWorker.getRegistrations()).some(r=>new URL(r.scope).pathname==='/offline-feasibility/')),true);
+    const metadataBefore=await p.evaluate(async()=>({caches:await caches.keys(),drafts:await V2Local.recovery()}));
+    const inspector=await context.newPage();await inspector.goto(origin+'offline-readiness/');await inspector.locator('#check').click();
+    await inspector.locator('#status').filter({hasText:/Read complete/}).waitFor();
+    const readiness=JSON.parse(await inspector.locator('#report').innerText());
+    assert.equal(readiness.rootWorkerActivated,true);assert.equal(readiness.updateWaiting,false);assert.equal(readiness.completeAppCachePresent,true);
+    assert.deepEqual(readiness.appCaches.map(c=>c.version),['stage5-test-v2']);assert.equal(readiness.appCaches[0].assetCount,8);
+    assert.equal(JSON.stringify(readiness).includes(before[0].operationId),false);assert.equal(JSON.stringify(readiness).includes('synthetic-5'),false);
+    const metadataAfter=await p.evaluate(async()=>({caches:await caches.keys(),drafts:await V2Local.recovery()}));
+    assert.deepEqual(metadataAfter.caches,metadataBefore.caches);assert.deepEqual(metadataAfter.drafts.drafts,metadataBefore.drafts.drafts);assert.deepEqual(metadataAfter.drafts.snapshots,metadataBefore.drafts.snapshots);
+    const download=inspector.waitForEvent('download');await inspector.locator('#export').click();assert.equal((await download).suggestedFilename(),'flaghunters-offline-readiness.json');await inspector.close();
+    console.log('PASS '+label+': read-only diagnostics report root worker/cache state, export safely and preserve caches/drafts/snapshots');
     await p.evaluate(async()=>{await new Promise((resolve,reject)=>{const r=indexedDB.deleteDatabase('flaghunters-v2-local');r.onsuccess=resolve;r.onerror=reject;});});
     await context.setOffline(true);await p.reload();await p.locator('#v2PreparedGroups').filter({hasText:/storage may have been evicted/}).waitFor();
     assert.equal(await p.getByRole('button',{name:/Reopen prepared round/}).count(),0);
