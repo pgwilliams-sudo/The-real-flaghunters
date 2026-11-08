@@ -143,6 +143,7 @@ async function scenario(browser,label) {
     const row=f.h.sheets.get('ScoringCredentials').rows.find(r=>r[0]===f.h.group.split('.')[0]),session=JSON.parse(row[1]);session.expires_at=0;row[1]=JSON.stringify(session);
     await fillPickups(page);await page.getByRole('button',{name:'Save this hole',exact:true}).tap();
     await browserWait(page,async()=>(await V2Local.pending())[0]?.failureKind==='credential');
+    await page.waitForFunction(()=>!document.querySelector('#v2PreparedGroups button'));
     const writes=f.requests.filter(r=>['saveHoleScores','operationStatus'].includes(r.action)).length;
     await page.evaluate(()=>{for(let i=0;i<3;i++){window.dispatchEvent(new Event('online'));document.dispatchEvent(new Event('visibilitychange'));}});
     await page.locator('#v2ReviewLocal').tap();await page.getByRole('heading',{name:'Local score recovery'}).waitFor();

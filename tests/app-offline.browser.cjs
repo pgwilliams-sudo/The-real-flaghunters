@@ -3,10 +3,11 @@ const http=require('node:http'),fs=require('node:fs'),assert=require('node:asser
 const {chromium,webkit}=require('playwright'),{harness}=require('./harness.cjs');
 async function run(browser,label){
   const h=harness(),events=h.sheets.get('Events').rows;events.push(events.splice(1,1)[0]);
-  let version=1,deny=false,holdWrites=true;const calls=[];
+  let version=1,deny=false,denyUpdateScript=false,workerReads=0,holdWrites=true;const calls=[];
   const server=http.createServer((req,res)=>{
     const file=req.url==='/offline-readiness/'?'dev/offline-readiness/index.html':req.url==='/offline-readiness/check.js'?'dev/offline-readiness/check.js':req.url==='/'?'index.html':req.url==='/offline-probe-sw.js'?'dev/offline-feasibility/offline-probe-sw.js':req.url==='/offline-feasibility/'?'dev/offline-feasibility/index.html':req.url==='/offline-feasibility/probe.js'?'dev/offline-feasibility/probe.js':req.url.slice(1);
     if(!['index.html','v2-app-sw.js','v2-offline.js','v2.js','v2-local.js','v2-sync.js','v2-recovery.js','v2.css','app-icon.PNG','dev/offline-feasibility/offline-probe-sw.js','dev/offline-feasibility/index.html','dev/offline-feasibility/probe.js','dev/offline-readiness/index.html','dev/offline-readiness/check.js'].includes(file)){res.writeHead(404);return res.end();}
+    if(file==='v2-app-sw.js'){workerReads++;if(denyUpdateScript){res.writeHead(503);return res.end('temporary update failure');}}
     if(deny&&file==='v2.css'){res.writeHead(403);return res.end('denied');}
     res.writeHead(200,{'Content-Type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':file.endsWith('.PNG')?'image/png':'text/html','Cache-Control':'no-store'});
     let content=fs.readFileSync(file);if(file==='v2-app-sw.js')content=content.toString().replace(/const VERSION='[^']+'/,"const VERSION='stage5-test-v"+version+"'");
@@ -34,10 +35,13 @@ async function run(browser,label){
     await p.locator('#v2PrepareOffline').click();await p.locator('#v2OfflineStatus').filter({hasText:/App assets prepared/}).waitFor({timeout:40000}).catch(async e=>{console.log('PREPARE:',await p.locator('#v2OfflineStatus').innerText(),await p.evaluate(async()=>(await navigator.serviceWorker.getRegistrations()).map(r=>({active:r.active?.state,waiting:r.waiting?.state,installing:r.installing?.state}))));throw e;});await p.reload();
     await p.waitForFunction(()=>!!navigator.serviceWorker.controller);
     await context.setOffline(true);await p.reload();
+    await p.locator('#homeMessage').filter({hasText:/Offline.*Reopen prepared round/}).waitFor();
+    await p.locator('#v2OfflineStatus').filter({hasText:/Cached app assets verified/}).waitFor();
     await p.getByRole('button',{name:/Reopen prepared round/}).click();await p.locator('#scoreScreen.active').waitFor();
     for(const b of await p.locator('.v2-pickup').all())await b.click();await p.getByRole('button',{name:'Save this hole',exact:true}).click();
     await observe(p,async()=>(await V2Local.pending()).length===1);
     const before=await p.evaluate(()=>V2Local.pending());assert.equal(before[0].attempts,0);assert.equal(calls.filter(c=>c.action==='saveHoleScores').length,0);
+    const offlineWorkerReads=workerReads;await p.locator('#v2PrepareOffline').click();await p.locator('#v2OfflineStatus').filter({hasText:/No new preparation or update check was performed while offline/}).waitFor();assert.equal(workerReads,offlineWorkerReads);assert.deepEqual(await p.evaluate(()=>V2Local.pending()),before);
     await p.close();p=await page();await p.getByRole('button',{name:/Reopen prepared round/}).click();await p.locator('#scoreScreen.active').waitFor();
     assert.deepEqual(await p.evaluate(()=>V2Local.pending()),before);assert.match(await p.locator('#v2OfflineStatus').innerText(),/Offline.*stale/);
     await p.evaluate(()=>{window.dispatchEvent(new PageTransitionEvent('pageshow',{persisted:true}));document.dispatchEvent(new Event('visibilitychange'));});
@@ -46,7 +50,14 @@ async function run(browser,label){
     assert.equal(keys.length,1);assert.equal(keys[0].urls.length,8);assert.ok(keys[0].urls.every(u=>u.startsWith(locationOrigin(origin))&&!u.includes('?')));
     assert.equal(await p.evaluate(async()=>{const requests=await(await caches.open((await caches.keys()).find(n=>n.startsWith('flaghunters-app:')))).keys();return requests.some(r=>/script.google|offline-feasibility|admin/.test(r.url));}),false);
     // An update waits while a scoring tab is alive and never alters the outbox.
-    await context.setOffline(false);version=2;await p.evaluate(async()=>{const r=await navigator.serviceWorker.getRegistration();await r.update();});
+    await context.setOffline(false);denyUpdateScript=true;
+    await p.locator('#v2PrepareOffline').click();await p.locator('#v2OfflineStatus').filter({hasText:/Preparation\/update check failed/}).waitFor();
+    assert.equal((await p.evaluate(()=>V2Local.pending()))[0].operationId,before[0].operationId);
+    denyUpdateScript=false;version=2;deny=true;
+    await p.locator('#v2PrepareOffline').click();await p.locator('#v2OfflineStatus').filter({hasText:/could not be installed/}).waitFor();
+    assert.deepEqual(await p.evaluate(async()=>(await caches.keys()).filter(n=>n.startsWith('flaghunters-app:'))),['flaghunters-app:/:stage5-test-v1']);
+    assert.equal((await p.evaluate(()=>V2Local.pending()))[0].operationId,before[0].operationId);deny=false;
+    await p.locator('#v2PrepareOffline').click();await p.locator('#v2OfflineStatus').filter({hasText:/Update ready/}).waitFor();
     await observe(p,async()=>!!(await navigator.serviceWorker.getRegistration()).waiting);
     assert.equal((await p.evaluate(()=>V2Local.pending()))[0].operationId,before[0].operationId);
     await p.close();p=await page();await p.waitForFunction(()=>navigator.serviceWorker.controller?.state==='activated');

@@ -135,7 +135,7 @@
       if(!localState.identity)throw Error('Open the prepared group whose synced local data you want to forget');
       if((await local.pending(scopeFilter())).length)return recoveryDialog('Unaccepted local scores cannot be cleared. Export them and keep the stored requests for recovery.');
       if(!confirm('Remove this round/group’s synced local snapshot and stored group session from this device? Server scores and history remain unchanged.'))return;
-      await local.forget(localState.identity,true);localState.identity=null;localState.snapshot=null;state.group='';allScores=[];selectedGroup=[];showScreen('homeScreen');await refreshLocalStatus();
+      await local.forget(localState.identity,true);localState.identity=null;localState.snapshot=null;state.group='';allScores=[];selectedGroup=[];showScreen('homeScreen');await preparedGroups();await refreshLocalStatus();
     }catch(error){recoveryDialog(error.message);}
   };
   async function finishGate() {
@@ -353,7 +353,7 @@
           const cached=await local.getSession(draft.identity.backend,draft.identity.eventId,draft.identity.groupNo);
           if(state.admin?.split('.')[0]===draft.identity.credentialId)state.admin='';
           if(cached?.credentialId===draft.identity.credentialId)await local.removeSession(draft.identity.backend,draft.identity.eventId,draft.identity.groupNo);
-          state.group='';
+          state.group='';await preparedGroups();
         }
         if(error&&/permanently locked/i.test(error.message)) {
           state.meta={...state.meta,locked:true};
@@ -490,5 +490,6 @@
   window.addEventListener('pageshow',preparedGroups);
   refreshLocalStatus();void preparedGroups();
   void synchronize({force:true});
-  if(API_URL) Promise.resolve(initialise()).then(()=>{refreshLocalStatus();void synchronize({force:true});});
+  if(API_URL&&navigator.onLine) Promise.resolve(initialise()).then(()=>{refreshLocalStatus();void synchronize({force:true});});
+  else if(API_URL)showMessage('homeMessage','Offline. Use Reopen prepared round above for local scoring. Live results need a connection.','info');
 })();
