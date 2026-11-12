@@ -11,11 +11,11 @@ test('offline prepared listing requires matching backend/event/group/credential 
   assert.equal((await local.prepared('test',100)).length,0);const prepared=await local.prepared('test',99);assert.equal(prepared.length,1);assert.equal(prepared[0].event.tee,'White');
   await local.removeSession('test','round',1);assert.equal((await local.prepared('test',99)).length,0);assert.equal((await local.pending())[0].operationId,'offline-operation-0001');
 });
-function worker({login=false,badJs=false}={}){
-  const handlers={},requests=[],deleted=[],stored=new Map();
+function worker({login=false,badJs=false,stall=null}={}){
+  const handlers={},requests=[],deleted=[],stored=new Map(),timers=[];
   const cache={put:async(k,v)=>stored.set(k,v),match:async k=>stored.get(k)};
-  const ctx={URL,Response:class {constructor(body,options){this.body=body;this.options=options;}},self:{location:{href:'https://private.test/v2-app-sw.js'},addEventListener:(name,handler)=>handlers[name]=handler},caches:{open:async()=>cache,keys:async()=>['diagnostic-cache','unrelated-cache','flaghunters-app:/:stage5-old'],delete:async name=>deleted.push(name)},fetch:async(url)=>{requests.push(url);return {ok:true,type:'basic',url,headers:{get:()=>url.endsWith('.js')?(badJs?'text/html':'text/javascript'):url.endsWith('.css')?'text/css':url.endsWith('.PNG')?'image/png':'text/html'},arrayBuffer:async()=>new ArrayBuffer(0),clone:()=>({text:async()=>login?'<h1>Sign in</h1>':'<script src="v2-offline.js"></script>'})};}};
-  vm.createContext(ctx);vm.runInContext(fs.readFileSync('v2-app-sw.js','utf8'),ctx);return {handlers,requests,deleted,stored};
+  const ctx={URL,AbortController,TextDecoder,setTimeout:fn=>{timers.push(fn);return fn;},clearTimeout:()=>{},Response:class {constructor(body,options){this.body=body;this.options=options;}},self:{location:{href:'https://private.test/v2-app-sw.js'},addEventListener:(name,handler)=>handlers[name]=handler},caches:{open:async()=>cache,keys:async()=>['diagnostic-cache','unrelated-cache','flaghunters-app:/:stage5-old'],delete:async name=>deleted.push(name)},fetch:async(url)=>{requests.push(url);if(stall==='fetch')return new Promise(()=>{});return {ok:true,type:'basic',url,headers:{get:()=>url.endsWith('.js')?(badJs?'text/html':'text/javascript'):url.endsWith('.css')?'text/css':url.endsWith('.PNG')?'image/png':'text/html'},arrayBuffer:async()=>stall==='body'?new Promise(()=>{}):new TextEncoder().encode(login?'<h1>Sign in</h1>':'<script src="v2-offline.js"></script>').buffer,clone:()=>({text:async()=>login?'<h1>Sign in</h1>':'<script src="v2-offline.js"></script>'})};}};
+  vm.createContext(ctx);vm.runInContext(fs.readFileSync('v2-app-sw.js','utf8'),ctx);return {handlers,requests,deleted,stored,timers};
 }
 test('app worker intercepts only exact clean static GET URLs; diagnostic/auth/backend/private query requests pass through',async()=>{
   const w=worker();let install;w.handlers.install({waitUntil:p=>install=p});await install;assert.equal(w.stored.size,8);
@@ -48,5 +48,15 @@ test('fragment-bearing app URLs use the canonical cached shell without widening 
   for(const path of ['/?credential=secret#','/admin#','/offline-feasibility/#']){
     let intercepted=false;w.handlers.fetch({request:{url:'https://private.test'+path,method:'GET',headers:{has:()=>false}},respondWith:()=>intercepted=true});
     assert.equal(intercepted,false,path);
+  }
+});
+
+test('stalled asset fetch or body rejects installation before cache publication and preserves old caches',async()=>{
+  for(const stall of ['fetch','body']){
+    const w=worker({stall});let install;w.handlers.install({waitUntil:p=>install=p});
+    const rejected=assert.rejects(install,/Offline asset preparation timed out/);
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(w.timers.length,1,'worker must bound asset preflight');w.timers[0]();await rejected;
+    assert.equal(w.stored.size,0);assert.deepEqual(w.deleted,[]);
   }
 });

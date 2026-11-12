@@ -40,3 +40,9 @@ Native owner-private deployment succeeded at 2026-11-12T08:39:02.630165Z:
 - URL: https://flaghunters-v2-test-8b76.williamsgpeter.chatgpt.site
 
 This supersedes the initial not-deployed status above. Stage 5 remains NOT ACCEPTED pending online preparation/activation and the agreed focused offline /# reopen and reload. No production, backend, GitHub main or Stage 6 changes performed.
+
+## Physical rollout observation — 12 November
+
+Online Prepare in Stage5StorageTest timed out reporting an update still installing. Owner supplied readiness report 5 at 2026-11-12T10:14:01.381Z: root active controller, separate installing worker in installing state, no waiting worker; only complete eight-asset stage5-v3 cache, errors empty. This does not establish completion of v4 installation or activation, so the focused offline retest has not begun. Existing v3 cache remains intact. No data clearing or repeated preparation requested.
+
+The subsequent photographed readiness observation at 2026-11-12T10:15:32.934Z still showed a separate installing worker and stage5-v3 cache. Owner closed both app/readiness tabs online, reopened root online and retried Prepare once as directed. The next photo again reports preparation timed out with update installing. This is a repeated installation-progress issue; v4 completion is not established. Stop repeated preparation/wait loops and investigate before the focused offline retest. No data clearing, forced activation or new deployment was performed.

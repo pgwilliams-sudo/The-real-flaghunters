@@ -3,13 +3,14 @@ const http=require('node:http'),fs=require('node:fs'),assert=require('node:asser
 const {chromium,webkit}=require('playwright'),{harness}=require('./harness.cjs');
 async function run(browser,label){
   const h=harness(),events=h.sheets.get('Events').rows;events.push(events.splice(1,1)[0]);
-  let version=1,deny=false,denyUpdateScript=false,workerReads=0,holdWrites=true;const calls=[];
+  let version=1,deny=false,denyUpdateScript=false,workerReads=0,holdWrites=true,stallBody=false;const stalled=[];const calls=[];
   const server=http.createServer((req,res)=>{
     const file=req.url==='/offline-readiness/'?'dev/offline-readiness/index.html':req.url==='/offline-readiness/check.js'?'dev/offline-readiness/check.js':req.url==='/'?'index.html':req.url==='/offline-probe-sw.js'?'dev/offline-feasibility/offline-probe-sw.js':req.url==='/offline-feasibility/'?'dev/offline-feasibility/index.html':req.url==='/offline-feasibility/probe.js'?'dev/offline-feasibility/probe.js':req.url.slice(1);
     if(!['index.html','v2-app-sw.js','v2-offline.js','v2.js','v2-local.js','v2-sync.js','v2-recovery.js','v2.css','app-icon.PNG','dev/offline-feasibility/offline-probe-sw.js','dev/offline-feasibility/index.html','dev/offline-feasibility/probe.js','dev/offline-readiness/index.html','dev/offline-readiness/check.js'].includes(file)){res.writeHead(404);return res.end();}
     if(file==='v2-app-sw.js'){workerReads++;if(denyUpdateScript){res.writeHead(503);return res.end('temporary update failure');}}
     if(deny&&file==='v2.css'){res.writeHead(403);return res.end('denied');}
     res.writeHead(200,{'Content-Type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':file.endsWith('.PNG')?'image/png':'text/html','Cache-Control':'no-store'});
+    if(stallBody&&file==='v2.css'){res.write('/* stalled body');stalled.push(res);return;}
     let content=fs.readFileSync(file);if(file==='v2-app-sw.js')content=content.toString().replace(/const VERSION='[^']+'/,"const VERSION='stage5-test-v"+version+"'");
     res.end(content);
   });
@@ -63,7 +64,16 @@ async function run(browser,label){
     await context.setOffline(false);denyUpdateScript=true;
     await p.locator('#v2PrepareOffline').click();await p.locator('#v2OfflineStatus').filter({hasText:/Preparation\/update check failed/}).waitFor();
     assert.equal((await p.evaluate(()=>V2Local.pending()))[0].operationId,before[0].operationId);
-    denyUpdateScript=false;version=2;deny=true;
+    denyUpdateScript=false;version=2;stallBody=true;
+    await p.locator('#v2PrepareOffline').click();
+    await p.locator('#v2OfflineStatus').filter({hasText:/could not be installed/}).waitFor({timeout:40000});
+    assert.deepEqual(await p.evaluate(async()=>(await caches.keys()).filter(n=>n.startsWith('flaghunters-app:'))),['flaghunters-app:/:stage5-test-v1']);
+    const afterStall=await p.evaluate(()=>V2Local.pending());
+    const durable=rows=>rows.map(({operationId,identity,request,fingerprint})=>({operationId,identity,request,fingerprint}));
+    assert.deepEqual(durable(afterStall),durable(before));
+    stallBody=false;for(const response of stalled)response.end(' */');
+    console.log('PASS '+label+': stalled update body reaches worker deadline, preserves old cache and pending score payloads');
+    deny=true;
     await p.locator('#v2PrepareOffline').click();await p.locator('#v2OfflineStatus').filter({hasText:/could not be installed/}).waitFor();
     assert.deepEqual(await p.evaluate(async()=>(await caches.keys()).filter(n=>n.startsWith('flaghunters-app:'))),['flaghunters-app:/:stage5-test-v1']);
     assert.equal((await p.evaluate(()=>V2Local.pending()))[0].operationId,before[0].operationId);deny=false;
