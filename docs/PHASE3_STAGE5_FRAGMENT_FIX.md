@@ -29,3 +29,14 @@ Storage eviction, exhaustive device/profile combinations and uncommon worker-ins
 ## Isolation preflight
 
 On 12 November Sites metadata reconfirmed project appgprj_6ae88c84e7388191804ce879ca000a02, Flag Hunters V2 — TEST ONLY, at https://flaghunters-v2-test-8b76.williamsgpeter.chatgpt.site. Current user is owner; custom access revision 1 contains only that owner, no editors/groups/external visitors. The previously owner-verified isolated Script/endpoint and private synthetic Sheet binding are recorded in PHASE3_STAGE5_PHYSICAL_RESULTS.md; this fix does not change or write to any of them. This is preservation of the established binding, not a new inspection of live Script Properties. No Site deployment, production change, GitHub main merge or Stage 6 work is authorized by this development commit.
+
+## Approved private test deployment
+
+Owner approved deployment of 3092a75 on 12 November. Pre-deployment Sites metadata reconfirmed owner-only custom access. The Site source checkout was clean and matched the fetched remote before copying exact approved worker bytes; only dist/v2-app-sw.js changed. Separate Site publishing repository commit: 642d0c31e2ecbe510d2fd46c9503bfada249f0a8 (its configured main branch is not GitHub main). Existing safe stdin-only source-credential helper was used; no credential was persisted.
+
+Native owner-private deployment succeeded at 2026-11-12T08:39:02.630165Z:
+- Deployment: appgdep_6af57b1c29008191898093981e87a49c
+- Saved version: appgprj_6ae88c84e7388191804ce879ca000a02~appgver_95e019ca8dec8191ba596b051a7fb448
+- URL: https://flaghunters-v2-test-8b76.williamsgpeter.chatgpt.site
+
+This supersedes the initial not-deployed status above. Stage 5 remains NOT ACCEPTED pending online preparation/activation and the agreed focused offline /# reopen and reload. No production, backend, GitHub main or Stage 6 changes performed.
