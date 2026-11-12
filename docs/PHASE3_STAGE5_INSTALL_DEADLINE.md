@@ -1,5 +1,7 @@
 # Stage 5 installation deadline follow-up — 12 November 2026
 
+> Current outcome (12 November 2026): agreed essential physical checks complete; acceptance recommended. See [final acceptance report](PHASE3_STAGE5_ACCEPTANCE.md). Earlier statuses below are chronological and superseded where noted. Owner sign-off, production release and Stage 6 are not inferred.
+
 Status: development candidate only; requires approval before another private test Site deployment. Stage 5 remains unaccepted.
 
 ## Evidence and limits
@@ -35,3 +37,7 @@ Native private deployment succeeded at 2026-11-12T10:29:21.287021Z:
 - URL https://flaghunters-v2-test-8b76.williamsgpeter.chatgpt.site
 
 Initial candidate-only status is superseded by this approved test deployment. Physical update preparation/activation and focused /# offline reopen/reload remain pending. Stage 5 is NOT ACCEPTED. No backend, production, GitHub main or Stage 6 changes.
+
+## Post-v5 rollout report
+
+Owner again observed preparation timeout. Readiness report 6 at 2026-11-12T10:32:48.114Z shows root active controller, a separate installing worker, no waiting worker, only complete eight-asset stage5-v3 cache, and errors empty. It does not identify the installing worker code version; therefore v5 execution and its deadline cannot be inferred. The deadline change has not been physically validated. Existing prepare code waits for an already installing candidate instead of forcing another update; an older unfinished candidate may therefore prevent this button from requesting the newest script. Next limited recovery is a Safari process restart, without storage clearing, before another observation. This hypothesis is not proof of Safari internals. Stage 5 remains unaccepted.

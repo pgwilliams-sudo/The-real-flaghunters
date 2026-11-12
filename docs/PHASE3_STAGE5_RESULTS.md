@@ -1,5 +1,7 @@
 # Stage 5 development results — 2026-11-05
 
+> Current outcome (12 November 2026): agreed essential physical checks complete; acceptance recommended. See [final acceptance report](PHASE3_STAGE5_ACCEPTANCE.md). Earlier statuses below are chronological and superseded where noted. Owner sign-off, production release and Stage 6 are not inferred.
+
 Development only on `development/v2`. No Stage 5 deployment, Site source synchronization, production change, main merge or Stage 6 work was performed. Stage 4 provisional acceptance is recorded in `PHASE3_STAGE4_RESULTS.md` (commit `ce2a834`), following the already-pushed Stage 4 mitigation `2d7cc27`. The supplied checkout initially contained an older `work` branch; the remote development baseline was recovered and the implementation validated in a dedicated `development/v2` worktree.
 
 ## Implemented

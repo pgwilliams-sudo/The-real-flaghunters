@@ -1,5 +1,7 @@
 # Stage 5 offline fragment reload fix — 12 November 2026
 
+> Current outcome (12 November 2026): agreed essential physical checks complete; acceptance recommended. See [final acceptance report](PHASE3_STAGE5_ACCEPTANCE.md). Earlier statuses below are chronological and superseded where noted. Owner sign-off, production release and Stage 6 are not inferred.
+
 Status: development fix tested; not deployed; Stage 5 not accepted.
 
 ## Finding and minimal change

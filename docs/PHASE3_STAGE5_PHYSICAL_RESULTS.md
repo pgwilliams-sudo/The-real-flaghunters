@@ -1,5 +1,7 @@
 # Stage 5 physical acceptance session — 2026-11-05
 
+> Current outcome (12 November 2026): agreed essential physical checks complete; acceptance recommended. See [final acceptance report](PHASE3_STAGE5_ACCEPTANCE.md). Earlier statuses below are chronological and superseded where noted. Owner sign-off, production release and Stage 6 are not inferred.
+
 Status: DEPLOYED TO ISOLATED OWNER-PRIVATE TEST SITE; NOT ACCEPTED. Prior preflight entries below are chronological; the isolation gate subsequently passed on owner readback. Deployment of source 7230c89b5f5b4ff2c8695e91cb58e19dafc166c5 authorized only to the existing isolated owner-private V2 test environment. Production/main/Stage 6 changes prohibited. Follow docs/PHASE3_STAGE5_SAFARI.md one user action at a time.
 
 ## Read-only isolation preflight

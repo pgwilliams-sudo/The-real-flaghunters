@@ -1,5 +1,7 @@
 # Stage 5 physical Safari acceptance plan — prepared, not deployed
 
+> Current outcome (12 November 2026): agreed essential physical checks complete; acceptance recommended. See [final acceptance report](PHASE3_STAGE5_ACCEPTANCE.md). Earlier statuses below are chronological and superseded where noted. Owner sign-off, production release and Stage 6 are not inferred.
+
 Run only after separate approval to deploy the reviewed Stage 5 commit to the existing owner-private test Site `appgprj_6ae88c84e7388191804ce879ca000a02`. Keep its origin, audience, isolated Apps Script backend and production/main unchanged. No backend change is required for Stage 5. Preserve the diagnostic worker at `/offline-feasibility/` and its caches. Do not begin Stage 6.
 
 ## Evidence and setup
