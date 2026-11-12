@@ -1,6 +1,6 @@
 # Stage 5 final acceptance report — 12 November 2026
 
-**Result: all agreed essential physical checks PASS. Recommendation: accept Stage 5 for the isolated private V2 test environment. Owner sign-off is not inferred from the test observations.** No production release, main merge or Stage 6 is authorized by this report.
+**Result: all agreed essential physical checks PASS. Recommendation: accept Stage 5 for the isolated private V2 test environment. Owner explicitly accepted Stage 5 against report commit `f611b7e` on 12 November 2026.** No production release, main merge or Stage 6 is authorized by this report.
 
 This report supersedes the wider outstanding-test lists and unknown-cause-only release blockers in earlier chronological Stage 5 records, following the owner's explicitly agreed proportionate acceptance plan for a small private Saturday golf group.
 
@@ -54,4 +54,4 @@ Validation: **116 automated tests passed**, plus the real Chromium service-worke
 
 ## Decision boundary
 
-No essential physical checks remain under the agreed plan. Recommend Stage 5 acceptance with these recorded limitations. Any production deployment, merge to GitHub main or Stage 6 requires further owner instruction.
+No essential physical checks remain under the agreed plan. Recommend Stage 5 acceptance with these recorded limitations. Owner subsequently authorized Stage 6 planning documentation only. Any simulation execution, production deployment, merge to GitHub main or Saturday trial requires separate approval.
