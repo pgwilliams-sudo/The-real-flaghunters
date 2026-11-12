@@ -24,3 +24,14 @@ The new fake-worker regression failed before the fix (no deadline scheduled), th
 Validation completed: all 116 automated tests passed. The real Chromium service-worker suite passed offline reopen/reload at both / and /#, a deliberately stalled HTTP response body reaching the 25-second worker deadline, preservation of the old complete cache and pending operation ID/scope/payload, subsequent successful retry/update activation, synchronization and diagnostic-worker checks. Ordinary online retry counters may advance during the stalled-update test; immutable pending score content is verified separately. The first new browser assertion incorrectly required retry counters to remain unchanged while online; it was corrected to the intended durable-content invariant and the full browser suite passed. Physical Safari installation success is not claimed.
 
 Sites metadata reconfirmed existing TEST ONLY origin, owner-only custom audience, no editors/groups/external visitors. Backend/Sheet bindings remain unchanged from the established isolated synthetic setup. No deployment performed for this candidate; user approval remains required. No production/main/Stage 6 changes.
+
+## Approved isolated deployment — 12 November
+
+Owner explicitly approved 46d9d5e57080ab99e5a2f24743ccf6673d913d62. Sites metadata reconfirmed owner-only audience before source preparation. Clean Site source HEAD matched fetched remote; only exact approved dist/v2-app-sw.js bytes changed. Site publishing source commit 77af27be7ad5a8417ff9beb6d634f20cc4cf1649 is in the separate Site repository (not GitHub main).
+
+Native private deployment succeeded at 2026-11-12T10:29:21.287021Z:
+- Deployment appgdep_6af594f65c008191b6257695ca9a3bbb
+- Version appgprj_6ae88c84e7388191804ce879ca000a02~appgver_f1c12fbdc75481918f3ee3873664a0c1
+- URL https://flaghunters-v2-test-8b76.williamsgpeter.chatgpt.site
+
+Initial candidate-only status is superseded by this approved test deployment. Physical update preparation/activation and focused /# offline reopen/reload remain pending. Stage 5 is NOT ACCEPTED. No backend, production, GitHub main or Stage 6 changes.
