@@ -1,6 +1,6 @@
 # Stage 6 — one realistic synthetic 18-hole round
 
-**Script only: not executed.** Requires separate execution approval. Use the pinned candidate and isolated resources in [configuration checklist](PHASE3_STAGE6_CONFIGURATION.md). Credit Stage 1–5 coverage; this is one operational rehearsal, not another offline/conflict/device matrix.
+**Executed with separate owner approval on 12 November 2026: PASS.** See [results](PHASE3_STAGE6_SIMULATION_RESULTS.md). The script below is retained for audit; rerunning/resetting requires new approval. Use the pinned candidate and isolated resources in [configuration checklist](PHASE3_STAGE6_CONFIGURATION.md). Credit Stage 1–5 coverage; this is one operational rehearsal, not another offline/conflict/device matrix.
 
 ## Before starting
 
