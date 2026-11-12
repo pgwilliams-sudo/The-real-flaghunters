@@ -35,3 +35,18 @@ test('locked local message is consistent across server wording and interrupted u
 test('authentication HTML and mislabeled script responses fail installation before any cache publication',async()=>{
   for(const options of [{login:true},{badJs:true}]){const w=worker(options);let promise;w.handlers.install({waitUntil:p=>promise=p});await assert.rejects(promise,/Not the golf app shell|Unexpected asset type/);assert.equal(w.stored.size,0);}
 });
+
+// Safari can retain even an empty fragment in FetchEvent.request.url on reload.
+test('fragment-bearing app URLs use the canonical cached shell without widening private route access',async()=>{
+  const w=worker();let installed;w.handlers.install({waitUntil:p=>installed=p});await installed;
+  const shell=w.stored.get('https://private.test/');
+  for(const path of ['/','/#','/#home','/index.html#']){
+    let response;w.handlers.fetch({request:{url:'https://private.test'+path,method:'GET',headers:{has:()=>false}},respondWith:p=>response=p});
+    assert.ok(response,'must intercept '+path);assert.equal(await response,shell,path);
+  }
+  assert.equal(w.requests.length,8,'cached reload never falls through to network');
+  for(const path of ['/?credential=secret#','/admin#','/offline-feasibility/#']){
+    let intercepted=false;w.handlers.fetch({request:{url:'https://private.test'+path,method:'GET',headers:{has:()=>false}},respondWith:()=>intercepted=true});
+    assert.equal(intercepted,false,path);
+  }
+});

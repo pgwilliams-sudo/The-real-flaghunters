@@ -34,7 +34,17 @@ async function run(browser,label){
     assert.deepEqual(await p.evaluate(async()=>(await caches.keys()).filter(n=>n.startsWith('flaghunters-app:'))),[]);deny=false;
     await p.locator('#v2PrepareOffline').click();await p.locator('#v2OfflineStatus').filter({hasText:/App assets prepared/}).waitFor({timeout:40000}).catch(async e=>{console.log('PREPARE:',await p.locator('#v2OfflineStatus').innerText(),await p.evaluate(async()=>(await navigator.serviceWorker.getRegistrations()).map(r=>({active:r.active?.state,waiting:r.waiting?.state,installing:r.installing?.state}))));throw e;});await p.reload();
     await p.waitForFunction(()=>!!navigator.serviceWorker.controller);
-    await context.setOffline(true);await p.reload();
+    await context.setOffline(true);
+    // Close/reopen rather than same-document hash navigation, then force reload.
+    for(const suffix of ['', '#']){
+      const reopened=await context.newPage();await reopened.goto(origin+suffix);
+      await reopened.locator('#v2OfflineStatus').filter({hasText:/Cached app assets verified/}).waitFor();
+      await reopened.reload();
+      await reopened.locator('#v2OfflineStatus').filter({hasText:/Cached app assets verified/}).waitFor();
+      assert.equal(new URL(reopened.url()).pathname,'/');await reopened.close();
+    }
+    console.log('PASS '+label+': offline new-tab reopening and reload at / and /#');
+    await p.reload();
     await p.locator('#homeMessage').filter({hasText:/Offline.*Reopen prepared round/}).waitFor();
     await p.locator('#v2OfflineStatus').filter({hasText:/Cached app assets verified/}).waitFor();
     await p.getByRole('button',{name:/Reopen prepared round/}).click();await p.locator('#scoreScreen.active').waitFor();

@@ -1,6 +1,6 @@
 /* App shell only. Private sessions, scores and outbox live exclusively in IndexedDB. */
 'use strict';
-const VERSION='stage5-v3';
+const VERSION='stage5-v4';
 const BASE=new URL('./',self.location.href);
 const CACHE='flaghunters-app:'+BASE.pathname+':'+VERSION;
 const ASSETS=['','v2.css','v2-local.js','v2-sync.js','v2-recovery.js','v2-offline.js','v2.js','app-icon.PNG'];
@@ -29,6 +29,9 @@ self.addEventListener('activate',event=>event.waitUntil((async()=>{
 self.addEventListener('fetch',event=>{
   const request=event.request,url=new URL(request.url);
   if(request.method!=='GET'||url.origin!==BASE.origin||url.search||request.headers.has('authorization')||request.headers.has('range'))return;
+  // Fragments identify document state, not a different asset. Safari reloads may retain
+  // even an empty # in request.url; clear it unconditionally before exact matching.
+  url.hash='';
   if(url.pathname===BASE.pathname+'index.html')url.pathname=BASE.pathname;
   if(!urls.includes(url.href))return; // Includes no API, diagnostic, admin or private response routes.
   event.respondWith((async()=>{
