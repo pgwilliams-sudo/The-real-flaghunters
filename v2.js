@@ -408,7 +408,9 @@
     if(localState.saving||!localState.identity)return;
     if(state.meta?.locked||state.meta?.revealed_at||currentEvent?.locked){showMessage('scoreMessage','Final results are permanently locked. Pending requests remain available for export.','bad');return;}
     const who=localState.identity,hole=Number(holeOrder[holeIndex]);
-    try{if(!state.admin){const session=await local.getSession(who.backend,who.eventId,who.groupNo);if(!session||session.expires_at<=Date.now()||session.credentialId!==who.credentialId)throw Error('Scoring access expired or changed. Reconnect and reopen this group. Pending scores are retained.');}}catch(error){showMessage('scoreMessage','Not saved on this device: '+friendly(error),'bad');return;}
+    // Reserve synchronously, before the first IndexedDB await, to prevent duplicate taps/advancement.
+    localState.saving=true;
+    try{if(!state.admin){const session=await local.getSession(who.backend,who.eventId,who.groupNo);if(!session||session.expires_at<=Date.now()||session.credentialId!==who.credentialId)throw Error('Scoring access expired or changed. Reconnect and reopen this group. Pending scores are retained.');}}catch(error){localState.saving=false;showMessage('scoreMessage','Not saved on this device: '+friendly(error),'bad');return;}
     const controls=Array.from(document.querySelectorAll('#scoreScreen button,#scoreScreen select,#scoreScreen textarea')).map(el=>[el,el.disabled]);
     localState.saving=true;controls.forEach(([el])=>el.disabled=true);
     try {

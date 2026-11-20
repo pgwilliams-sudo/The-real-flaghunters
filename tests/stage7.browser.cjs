@@ -24,7 +24,8 @@ const {chromium}=require('playwright'),{harness}=require('./harness.cjs');
   await route.fulfill({status:200,contentType:'application/json',headers:{'access-control-allow-origin':'*'},body:JSON.stringify(result)});
  });
  async function open(suffix=''){const p=await context.newPage();p.on('pageerror',e=>errors.push(e.message));p.on('dialog',d=>d.accept());await p.goto(origin+suffix);return p;}
- async function pending(p,n){await p.waitForFunction(async count=>(await V2Local.pending()).length===count,n);}
+ async function observe(p,fn,arg){const end=Date.now()+30000;while(!await p.evaluate(fn,arg)){if(Date.now()>end)throw Error('Stage 7 observation timed out');await new Promise(resolve=>setTimeout(resolve,20));}}
+ async function pending(p,n){await observe(p,async count=>(await V2Local.pending()).length===count,n);}
  try{
   let p=await open();await p.getByRole('button',{name:/Enter Scores/}).click();await p.locator('.group-button').first().click();await p.locator('#scoreScreen.active').waitFor();
   assert.equal(await p.locator('#v2Code').count(),0);
@@ -35,7 +36,7 @@ const {chromium}=require('playwright'),{harness}=require('./harness.cjs');
   offline=true;await context.setOffline(true);
   for(const button of await p.locator('.v2-pickup').all())await button.click();
   await p.evaluate(()=>Promise.all([saveAndNext(),saveAndNext(),saveAndNext()]));
-  await pending(p,1);const before=await p.evaluate(()=>V2Local.pending());
+  await pending(p,1);assert.equal(await p.locator('#v2Hole').inputValue(),'1','duplicate Save & Next must advance once');const before=await p.evaluate(()=>V2Local.pending());
   assert.match(await p.locator('#scoreMessage').innerText(),/Saved on this device.*awaiting server acceptance/);
   await p.close();p=await open('#');await p.reload();
   await p.getByRole('button',{name:/Reopen prepared round/}).click();await p.locator('#scoreScreen.active').waitFor();
@@ -45,7 +46,7 @@ const {chromium}=require('playwright'),{harness}=require('./harness.cjs');
   await p.locator('#v2Hole').selectOption('0');
   await p.evaluate(()=>setScore('p1',5));await p.locator('.v2-reason[data-player-id="p1"]').fill('Stage 7 checked card');
   await p.getByRole('button',{name:'Save this hole',exact:true}).click();
-  await p.waitForFunction(async()=>(await V2Local.recovery()).drafts.some(d=>d.request.hole===1&&d.request.scores.some(s=>s.playerId==='p1'&&s.gross===5)&&d.status==='accepted'));await pending(p,0);
+  await observe(p,async()=>(await V2Local.recovery()).drafts.some(d=>d.request.hole===1&&d.request.scores.some(s=>s.playerId==='p1'&&s.gross===5)&&d.status==='accepted'));await pending(p,0);
   if(h.ctx.v2Rows('ScoreHistory').length!==5)console.log('CORRECTION_DIAGNOSTIC',JSON.stringify({
     scores:h.ctx.getScores('v2-event').map(s=>({player:s.player_id,hole:s.hole,status:s.score_status,gross:s.gross,revision:s.revision})),
     requests:calls.filter(c=>c.action==='saveHoleScores').map(c=>({operationId:c.operationId,hole:c.hole,scores:c.scores})),

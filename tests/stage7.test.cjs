@@ -78,3 +78,18 @@ test('new round scoring waits for admin start; partial setup failures retry with
  assert.equal(h.post(startRequest(h,eventId)).ok,true);
  assert.equal(h.post({action:'openGroup',eventId,groupNo:1}).ok,true);
 });
+
+test('PIN-free queued saves retain their IDs and payloads when a mode change rejects synchronization',async()=>{
+ const vm=require('node:vm'),fs=require('node:fs'),{IDBFactory}=require('fake-indexeddb');
+ const h=harness(),opened=anonymous(h),ctx={indexedDB:new IDBFactory(),AbortController,crypto,setTimeout,clearTimeout};
+ vm.createContext(ctx);for(const path of ['v2-local.js','v2-sync.js'])vm.runInContext(fs.readFileSync(path,'utf8'),ctx);
+ const local=ctx.V2Local,who={backend:'synthetic-stage7',eventId:'v2-event',groupNo:1,credentialId:opened.credential_id};
+ const boot=h.post({action:'roundBootstrap',credential:opened.token,eventId:who.eventId,groupNo:1});await local.prepare(who,boot);
+ const request={action:'saveHoleScores',eventId:who.eventId,hole:1,scores:[{playerId:'p1',status:'scored',gross:5,expectedRevision:0,reason:''}]};
+ const draft=await local.saveDraft(who,request,crypto.randomUUID());
+ h.properties.V2_SCORING_ACCESS_MODE='group-pin';
+ const sync=ctx.V2Sync.create({local,backend:who.backend,activeEvent:()=>who.eventId,credential:async()=>({token:opened.token}),transport:async data=>{const r=h.post(data);if(!r.ok)throw Error(r.error);return r;},schedule:()=>0,cancel:()=>{}});
+ await sync.kick();sync.stop();
+ const kept=await local.getDraft(draft.operationId);assert.equal(kept.status,'needs-review');assert.equal(kept.operationId,draft.operationId);assert.equal(kept.fingerprint,draft.fingerprint);
+ assert.equal(JSON.stringify(kept.request),JSON.stringify(draft.request));assert.equal((await local.pending()).length,1);assert.equal(h.ctx.v2Rows('ScoreHistory').length,0);
+});
