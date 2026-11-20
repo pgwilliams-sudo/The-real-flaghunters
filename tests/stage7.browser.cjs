@@ -46,6 +46,11 @@ const {chromium}=require('playwright'),{harness}=require('./harness.cjs');
   await p.evaluate(()=>setScore('p1',5));await p.locator('.v2-reason[data-player-id="p1"]').fill('Stage 7 checked card');
   await p.getByRole('button',{name:'Save this hole',exact:true}).click();
   await p.waitForFunction(async()=>(await V2Local.recovery()).drafts.some(d=>d.request.hole===1&&d.request.scores.some(s=>s.playerId==='p1'&&s.gross===5)&&d.status==='accepted'));await pending(p,0);
+  if(h.ctx.v2Rows('ScoreHistory').length!==5)console.log('CORRECTION_DIAGNOSTIC',JSON.stringify({
+    scores:h.ctx.getScores('v2-event').map(s=>({player:s.player_id,hole:s.hole,status:s.score_status,gross:s.gross,revision:s.revision})),
+    requests:calls.filter(c=>c.action==='saveHoleScores').map(c=>({operationId:c.operationId,hole:c.hole,scores:c.scores})),
+    drafts:await p.evaluate(async()=>(await V2Local.recovery()).drafts.map(d=>({operationId:d.operationId,status:d.status,request:d.request})))
+  }));
   assert.equal(h.ctx.v2Rows('ScoreHistory').length,5);
   assert.equal(h.ctx.getScores('v2-event').find(s=>s.player_id==='p1'&&s.hole===1).revision,2);
   const denied=await p.evaluate(async()=>{try{await apiPost({action:'revealResults',eventId:currentEvent.event_id});return '';}catch(e){return e.message;}});
