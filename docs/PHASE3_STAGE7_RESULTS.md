@@ -24,3 +24,18 @@ Software rollback does not restore scoring data. Preserve queues and journal/his
 ## Validation
 
 Candidate prepared through connected GitHub tools because the managed workspace failed to start. JavaScript syntax checks passed before commit. The existing GitHub Actions workflow is reused for the existing unit suite and a focused Chromium Stage 7 browser scenario; no deployment steps or production secrets. Test results will be recorded after CI completion; no Safari retest or full physical matrix claimed. Existing Stage 1–6 evidence is credited.
+
+
+## Completed validation — 20 November 2026
+
+Tested runtime/test commit: b1c4a07b62eee0bc12d3c85d559f37c36524a916.
+GitHub Actions run: https://github.com/pgwilliams-sudo/The-real-flaghunters/actions/runs/44744961061 — SUCCESS.
+
+- 123 unit/backend/storage tests passed, zero failed (116 existing + 7 focused Stage 7 cases). Coverage includes anonymous scope/validation, required correction reasons/audit, admin-only actions/reveal, dormant PIN issuance rejection, mode/revision/expiry rejection, finishing/locks, start idempotency and failure injection, plus queued-data retention on a mode-change rejection.
+- Focused Chromium browser scenario passed: no PIN prompt, actual service-worker/IndexedDB offline save/reopening/reload, one-hole advancement under overlapping Save & Next calls, automatic reconnect, accepted correction, admin-only reveal denial, PIN-mode reactivation, hidden PIN controls in free mode, duplicate create/group/start guards, lost-response start recovery, Saved ✓ and Home navigation. All API requests intercepted by an in-memory synthetic backend; no live Google or production data used.
+- The duplicate-save test exposed a real pre-existing gap: the saving flag was set after an awaited session read. It is now reserved synchronously, before that first await, so overlapping taps cannot advance multiple holes.
+- Initial browser checks used an insufficient asynchronous observation; explicit IndexedDB polling now checks the specific accepted operation. The mode-change queue fixture was corrected to include every group member. Final CI has no failures.
+- Existing broad physical/mobile/conflict evidence is credited; no new Safari matrix or Saturday trial performed. Previously separate mobile/local-draft browser commands remain available, while the branch workflow now runs the focused Stage 7 browser case.
+- Git tree comparison confirms backend/Code.gs, index.html and every PHASE3_STAGE6 document unchanged; no files deleted. The Site source repository, deployed worker, Apps Script, Sheets, Site audience, production and GitHub main were not changed.
+
+No remaining implementation/test blocker. A future separately approved test deployment must use the matching backend/frontend pair, account for pending scores before changing mode/revision and preserve older scoped recovery records. Current hosted test access remains private; no promise of anonymous access to that unchanged hosted frontend is made. Anonymous backend use, lack of individual attribution and potential unsolicited scoring/usage are the explicitly accepted risks. No gateway or Stage 7A work remains in scope.
