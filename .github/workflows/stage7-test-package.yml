@@ -1,0 +1,41 @@
+name: Package approved Stage 7 isolated test release
+on:
+  push:
+    branches: [development/v2]
+    paths: [.github/workflows/stage7-test-package.yml]
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ec742d2150f31bc65d71c4c72f95fc8eff5427a9
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Package exact approved static assets and backend
+        run: |
+          mkdir -p release/.openai release/dist/offline-feasibility release/dist/offline-readiness
+          cp index.html v2.css v2-local.js v2-sync.js v2-recovery.js v2-offline.js v2.js app-icon.PNG v2-app-sw.js release/dist/
+          cp dev/offline-feasibility/index.html dev/offline-feasibility/probe.js release/dist/offline-feasibility/
+          cp dev/offline-feasibility/offline-probe-sw.js release/dist/
+          cp dev/offline-readiness/index.html dev/offline-readiness/check.js release/dist/offline-readiness/
+          node -e "require('fs').writeFileSync('release/.openai/hosting.json',JSON.stringify({project_id:'appgprj_6ae88c84e7388191804ce879ca000a02',static:{directory:'dist'}},null,2)+'\n')"
+          tar -czf stage7-site.tar.gz -C release .openai/hosting.json dist
+          node scripts/package-backend.cjs backend-package
+          tar -czf stage7-backend.tar.gz -C backend-package Code.gs Phase1.gs
+          sha256sum stage7-site.tar.gz stage7-backend.tar.gz > SHA256SUMS
+          git rev-parse HEAD > APPROVED_SOURCE.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stage7-isolated-test-release-ec742d2
+          path: |
+            stage7-site.tar.gz
+            stage7-backend.tar.gz
+            SHA256SUMS
+            APPROVED_SOURCE.txt
+          retention-days: 30
