@@ -6,7 +6,7 @@
     if(/permanently locked/i.test(error.message))return 'Final results are permanently locked. Pending requests remain available for export; no resubmission is allowed.';
     if(error.name==='QuotaExceededError')return 'Device storage is full. This action was not completed. Keep existing scores and export a recovery copy.';
     if(error.name==='AbortError')return 'Recovery was interrupted. Saved requests are retained. Use Retry synchronization when ready.';
-    if(/credential|session.*expired/i.test(error.message))return 'Scoring access expired or changed. Open this group and sign in with its current PIN, then review or retry. Saved scores remain on this device.';
+    if(/credential|session.*expired/i.test(error.message))return 'Scoring access expired or changed. Reopen this group online to refresh scoring access, then review or retry. Saved scores remain on this device.';
     if(error.name==='TypeError'||error.name==='SyntaxError')return 'Connection interrupted. Server acceptance is unconfirmed. Keep the saved request and use Retry when online.';
     return error.message;
   }

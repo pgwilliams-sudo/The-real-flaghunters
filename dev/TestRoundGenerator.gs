@@ -117,11 +117,10 @@ function trgSteps_(s,admin,finish) {
   if(!finish) {
     steps.push(()=>{s.eventId=trgPost_({action:'createEvent',credential:admin,tee:'White',date:'2026-06-20'}).event_id;});
     steps.push(()=>trgCall_(s,admin,'saveGroups',{groups:TRG_HANDICAPS.map((h,i)=>({player_id:'synthetic-'+(i+1),group_no:Math.floor(i/4)+1,handicap_index:h,scorer:i%4===0,start_hole:[1,7,13][Math.floor(i/4)]}))}));
-    steps.push(()=>trgCall_(s,admin,'saveCompetitionSetup',{nearest_enabled:true,nearest_holes:[3,8,12,17],blind_enabled:true,team234_enabled:true}));
+    steps.push(()=>trgCall_(s,admin,'startRound',{groupVersion:v2Meta(s.eventId).group_version,operationId:trgOperation_(s,'start-round'),nearest_enabled:true,nearest_holes:[3,8,12,17],blind_enabled:true,team234_enabled:true}));
     for(const groupNo of [1,2,3]) {
       steps.push(()=>{
-        const issued=trgCall_(s,admin,'issueGroupCredential',{groupNo});
-        s.groups[groupNo]=trgPost_({action:'openGroup',eventId:s.eventId,groupNo,pin:issued.pin}).token;
+        s.groups[groupNo]=trgOpenGroup_(s,admin,groupNo);
       });
       steps.push(()=>trgCall_(s,s.groups[groupNo],'confirmGroupHandicaps',{groupNo,handicaps:TRG_HANDICAPS.slice((groupNo-1)*4,groupNo*4).map((h,i)=>({player_id:'synthetic-'+((groupNo-1)*4+i+1),handicap_index:h}))}));
     }
@@ -165,8 +164,7 @@ function trgRun_(finish) {
         try {trgCall_(s,s.groups[groupNo],'verifyGroupCredential',{groupNo});}
         catch(error) {
           if(!/credential|expired|authorize/i.test(error.message))throw error;
-          const issued=trgCall_(s,admin,'issueGroupCredential',{groupNo});
-          s.groups[groupNo]=trgPost_({action:'openGroup',eventId:s.eventId,groupNo,pin:issued.pin}).token;
+          s.groups[groupNo]=trgOpenGroup_(s,admin,groupNo);
           trgSave_(s);
         }
       }
@@ -183,3 +181,8 @@ function trgRun_(finish) {
 }
 function generateV2TestRound() {const r=trgRun_(false);console.log(JSON.stringify(r));return r;}
 function finishV2GeneratedRound() {const r=trgRun_(true);console.log(JSON.stringify(r));return r;}
+
+function trgOpenGroup_(s,admin,groupNo) {
+  const pin=v2ScoringPolicy().mode==='group-pin'?trgCall_(s,admin,'issueGroupCredential',{groupNo}).pin:undefined;
+  return trgPost_({action:'openGroup',eventId:s.eventId,groupNo,pin}).token;
+}

@@ -67,7 +67,30 @@ function v2Writable(eventId) {
   if(!['active','complete'].includes(String(event.status).toLowerCase())) throw new Error('Round cannot be edited');
   return meta;
 }
+// PIN-free deliberately grants anonymous scoring; a session is not personal identity.
+function v2ScoringPolicy() {
+  const mode=v2Props().getProperty('V2_SCORING_ACCESS_MODE')||'pin-free';
+  const revision=v2Props().getProperty('V2_SCORING_ACCESS_REVISION')||'1';
+  if(!['pin-free','group-pin'].includes(mode)||!/^\d{1,9}$/.test(revision))throw Error('Invalid scoring access configuration');
+  return {mode,revision};
+}
+function v2CheckScoringCredential(c) {
+  if(c.role!=='scorer')return;
+  const policy=v2ScoringPolicy();
+  if((c.access_mode||'group-pin')!==policy.mode||String(c.access_revision||'1')!==policy.revision)
+    throw Error('Scoring credential invalid or expired: access mode changed');
+  const meta=v2Meta(c.event_id);
+  if(c.group_version&&c.group_version!==meta?.group_version)throw Error('Scoring credential invalid or expired: groups changed');
+}
+function v2ScoringStarted(eventId) {
+  const meta=v2Meta(eventId);
+  if(meta?.start_required&&!meta.started_at)throw Error('Admin must select competitions and start this round first');
+}
 function v2Issue(role,eventId,groupNo,extra={}) {
+  if(role==='scorer') {
+    const policy=v2ScoringPolicy();
+    extra={...extra,access_mode:policy.mode,access_revision:policy.revision,group_version:v2Meta(eventId)?.group_version};
+  }
   const id=v2Id(),secret=role==='scorer'?v2GroupSecret(id):v2Id()+v2Id();
   const data={role,event_id:String(eventId||''),group_no:Number(groupNo)||0,hash:v2Hash(secret),
     expires_at:Date.now()+(role==='admin'?12*3600:30*86400)*1000,revoked:false,...extra};
@@ -92,7 +115,11 @@ function v2GroupPin(previousHash) {
 }
 function v2OpenGroup(data) {
   return withScriptLock(()=>{
-    v2Writable(data.eventId);
+    v2Writable(data.eventId);v2ScoringStarted(data.eventId);
+    const groupNo=Number(data.groupNo),members=getGroups(data.eventId).filter(p=>p.group_no===groupNo);
+    if(!Number.isInteger(groupNo)||groupNo<1||!members.length)throw Error('Invalid scoring group');
+    const policy=v2ScoringPolicy();
+    if(policy.mode==='pin-free')return {ok:true,...v2Issue('scorer',data.eventId,groupNo),scoring_access_mode:policy.mode};
     const row=v2Rows('ScoringCredentials').reverse().find(r=>{
       const c=JSON.parse(r.data);
       return c.role==='scorer' && c.event_id===String(data.eventId) &&
@@ -106,6 +133,7 @@ function v2OpenGroup(data) {
     const valid=/^[0-9]{2}$/.test(String(data.pin||'')) && v2Equal(c.pin_hash,v2Hash(String(data.pin)));
     v2Put('ScoringCredentials',row.credential_id,[row.credential_id,JSON.stringify(c)]);
     if(!valid) throw new Error('Group PIN invalid or expired');
+    v2CheckScoringCredential(c);
     const token=row.credential_id+'.'+v2GroupSecret(row.credential_id);
     v2Scope(v2Auth(token),data.eventId,[],data.groupNo);
     return {ok:true,token,credential_id:row.credential_id,expires_at:c.expires_at};
@@ -116,12 +144,14 @@ function v2Auth(token) {
   const row=parts.length===2 && v2Rows('ScoringCredentials').find(r=>r.credential_id===parts[0]);
   const c=row && JSON.parse(row.data);
   if(!c || c.revoked || c.expires_at<=Date.now() || !v2Equal(c.hash,v2Hash(parts[1]))) throw new Error('Scoring credential invalid or expired');
-  return {role:c.role,credential_id:row.credential_id,event_id:c.event_id,group_no:c.group_no};
+  v2CheckScoringCredential(c);
+  return {role:c.role,credential_id:row.credential_id,event_id:c.event_id,group_no:c.group_no,access_mode:c.role==='scorer'?(c.access_mode||'group-pin'):undefined};
 }
 function v2RecheckActor(actor) {
   if(!actor) throw new Error('Authentication required');
   const row=v2Rows('ScoringCredentials').find(r=>r.credential_id===actor.credential_id),c=row&&JSON.parse(row.data);
   if(!c||c.revoked||c.expires_at<=Date.now()) throw new Error('Scoring credential invalid or expired');
+  v2CheckScoringCredential(c);
 }
 function v2Admin(actor) { v2RecheckActor(actor); if(actor.role!=='admin') throw new Error('Admin authentication required'); }
 function v2Scope(actor,eventId,playerIds,groupNo) {
@@ -129,6 +159,7 @@ function v2Scope(actor,eventId,playerIds,groupNo) {
   if(actor.role==='admin') return;
   if(actor.role!=='scorer' || actor.event_id!==String(eventId) || (groupNo!==undefined && Number(groupNo)!==actor.group_no))
     throw new Error('Credential does not authorize this group');
+  v2ScoringStarted(eventId);
   const ids=new Set(legacyGetGroups(eventId).filter(p=>p.group_no===actor.group_no).map(p=>String(p.player_id)));
   if((playerIds||[]).some(id=>!ids.has(String(id)))) throw new Error('Credential does not authorize this player');
 }
@@ -358,7 +389,7 @@ function v2ResolveOperation(data,actor) {
 function doGet(e) {
   try {
     const p=(e&&e.parameter)||{},action=p.action||'status',eventId=String(p.eventId||'');
-    if(action==='status') return jsonResponse({ok:true,app:'The Real Flag Hunters',version:'2-phase2',api_generation:'v2-phase1',message:'V2 test backend'});
+    if(action==='status') return jsonResponse({ok:true,app:'The Real Flag Hunters',version:'2-stage7',api_generation:'v2-phase1',scoring_access_mode:v2ScoringPolicy().mode,scoring_access_revision:v2ScoringPolicy().revision,message:'V2 test backend'});
     if(action==='scorecard') return jsonResponse({ok:true,scorecard:v2Scorecard(eventId,String(p.playerId||''))});
     if(action==='scores') return jsonResponse({ok:true,scores:v2PublicScores(eventId)});
     if(action==='leaderboard') return jsonResponse({ok:true,leaderboard:getLeaderboard(eventId),revealed:v2ResultsRevealed(eventId)});
@@ -390,10 +421,12 @@ function doPost(e) {
     if(action==='resolveOperation')return jsonResponse(v2ResolveOperation(data,actor));
     if(action==='operationStatus')return jsonResponse(v2OperationStatus(data,actor));
     if(action==='revealResults') return jsonResponse(v2RevealResults(data,actor));
+    if(action==='startRound') return jsonResponse(v2StartRound(data,actor));
     if(action==='adminCompetitionData') {v2Admin(actor);return jsonResponse({ok:true,...getCompetitionData(data.eventId)});}
 
     if(action==='issueGroupCredential') return jsonResponse(withScriptLock(()=>{
       v2Admin(actor); v2Writable(data.eventId);
+      if(v2ScoringPolicy().mode!=='group-pin')throw Error('Group PINs are disabled in PIN-free mode');
       const group=getGroups(data.eventId).filter(p=>p.group_no===Number(data.groupNo));
       if(!group.length || group.filter(p=>p.scorer).length!==1) throw new Error('Group must have one assigned scorer');
       const table=v2Table('ScoringCredentials'),values=table.getDataRange().getValues();
@@ -468,6 +501,7 @@ function doPost(e) {
 function v2AfterGroupSave(eventId) {
   const meta=v2Meta(eventId); if(!meta) return;
   meta.group_version=v2Id();meta.confirmed_groups={};
+  if(meta.start_required){delete meta.started_at;delete meta.start_operation;}
   v2Put('RoundEventsV2',eventId,[eventId,JSON.stringify(meta)]);
   v2Rows('ScoringCredentials').forEach(r=>{const c=JSON.parse(r.data);if(c.role==='scorer'&&c.event_id===String(eventId)){c.revoked=true;v2Put('ScoringCredentials',r.credential_id,[r.credential_id,JSON.stringify(c)]);}});
 }
@@ -477,7 +511,9 @@ function v2CreateEvent(data) {
   const eventId='event-'+v2Id(),date=data.date||Utilities.formatDate(new Date(),Session.getScriptTimeZone(),'yyyy-MM-dd');
   // Setup is never a writable scoring state. Failure at any step leaves an unscorable setup round.
   sheetNamed('Events').appendRow([eventId,date,'Brickendon Grange',tee,'setup',false]);
-  v2SnapshotEvent(eventId);SpreadsheetApp.flush();
+  v2SnapshotEvent(eventId);
+  const meta=v2Meta(eventId);meta.start_required=true;
+  v2Put('RoundEventsV2',eventId,[eventId,JSON.stringify(meta)]);SpreadsheetApp.flush();
   const values=sheetNamed('Events').getDataRange().getValues(),i=values.findIndex((r,j)=>j>0&&String(r[0])===eventId);
   sheetNamed('Events').getRange(i+1,5).setValue('active');
   return {ok:true,event_id:eventId,schema_version:2};
@@ -578,4 +614,38 @@ function v2Scorecard(eventId,playerId) {
   return {player_id:player.player_id,name:player.name,playing_handicap:player.playing_handicap,
     revealed:player.revealed,front9:player.front9,back9:player.back9,total:player.total,holes,
     hidden_holes:player.revealed?[]:[16,17,18]};
+}
+
+/** Final setup step. A lost response can retry the same intent without starting twice. */
+function v2StartRound(data,actor) {
+  return withScriptLock(()=>{
+    v2Admin(actor);
+    const eventId=String(data.eventId||''),meta=v2Writable(eventId),event=getEventById(eventId);
+    if(!meta||String(data.groupVersion||'')!==String(meta.group_version))throw Error('Group setup changed. Reload admin setup before starting.');
+    if(!/^[A-Za-z0-9_-]{16,120}$/.test(String(data.operationId||'')))throw Error('Invalid start operation ID');
+    const members=getGroups(eventId),numbers=[...new Set(members.map(p=>Number(p.group_no)))];
+    if(!numbers.length)throw Error('Save groups before starting the round');
+    if(!Array.isArray(data.nearest_holes))throw Error('Invalid selected holes');
+    const holes=data.nearest_holes.map(Number).sort((a,b)=>a-b);
+    const config={nearest_enabled:data.nearest_enabled===true,nearest_holes:holes,blind_enabled:data.blind_enabled===true,team234_enabled:data.team234_enabled===true};
+    if(new Set(holes).size!==holes.length||holes.some(h=>!competitionPar3Holes(event).includes(h))||
+      (config.nearest_enabled&&!holes.length)||(!config.nearest_enabled&&holes.length))throw Error('Select valid par-3 holes only');
+    if(config.blind_enabled&&(members.length<2||members.length%2))throw Error('Blind Pairs requires an even number of players.');
+    if(config.team234_enabled&&numbers.some(n=>members.filter(p=>Number(p.group_no)===n).length!==4))throw Error('The 2/3/4 Team Game requires every group to have exactly four players.');
+    const fingerprint=v2Hash(JSON.stringify({groupVersion:data.groupVersion,...config})),previous=meta.start_operation;
+    if(previous&&previous.fingerprint!==fingerprint)throw Error('Start choices changed. Reload the saved setup before retrying.');
+    if(meta.started_at)return {ok:true,started_at:meta.started_at,group_version:meta.group_version};
+    if(getScores(eventId).length)throw Error('Cannot start setup after scoring has begun');
+    meta.start_required=true;
+    meta.start_operation={operationId:previous?.operationId||data.operationId,fingerprint};
+    v2Put('RoundEventsV2',eventId,[eventId,JSON.stringify(meta)]);SpreadsheetApp.flush();
+    const record=competitionRecord(eventId);
+    record.enabled=config.nearest_enabled;record.holes=holes;
+    record.blindEnabled=config.blind_enabled;record.team234Enabled=config.team234_enabled;
+    record.pins=Object.fromEntries(Object.entries(record.pins).filter(([hole])=>holes.includes(Number(hole))));
+    saveCompetitionRecord(eventId,record);SpreadsheetApp.flush();
+    meta.started_at=v2Now();
+    v2Put('RoundEventsV2',eventId,[eventId,JSON.stringify(meta)]);SpreadsheetApp.flush();
+    return {ok:true,started_at:meta.started_at,group_version:meta.group_version};
+  });
 }

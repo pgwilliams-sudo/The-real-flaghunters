@@ -1,6 +1,6 @@
 const fs=require('node:fs'),vm=require('node:vm'),crypto=require('node:crypto');
 function harness() {
-  const sheets=new Map(),properties={V2_ENABLED:'true',V2_TEST_ONLY:'true',V2_SPREADSHEET_ID:'synthetic-test-only',V2_ADMIN_SECRET:'synthetic-test-admin-secret-not-real'};
+  const sheets=new Map(),properties={V2_SCORING_ACCESS_MODE:'group-pin',V2_ENABLED:'true',V2_TEST_ONLY:'true',V2_SPREADSHEET_ID:'synthetic-test-only',V2_ADMIN_SECRET:'synthetic-test-admin-secret-not-real'};
   let lock=false, writes=0, fault=null;
   function write(name,fn){writes++;if(fault&&fault.n===writes&&fault.when==='before')throw Error('Injected failure before '+name);fn();if(fault&&fault.n===writes&&fault.when==='after')throw Error('Injected failure after '+name);}
   class Sheet {

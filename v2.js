@@ -2,6 +2,19 @@
 (() => {
   'use strict';
   const state={admin:'',group:'',meta:null,pending:null,dirty:false};
+  const policy={mode:null,revision:null},setup={saving:false,starting:false,creating:false,groupVersion:null,attempt:null};
+  function acceptPolicy(result) {
+    if(!['pin-free','group-pin'].includes(result.scoring_access_mode))throw Error('This frontend requires the matching Stage 7 backend.');
+    policy.mode=result.scoring_access_mode;policy.revision=String(result.scoring_access_revision||'1');
+    const controls=document.getElementById('v2PinControls');
+    if(controls){controls.hidden=policy.mode!=='group-pin';controls.querySelectorAll('button,input').forEach(el=>el.disabled=controls.hidden);}
+    return result;
+  }
+  async function refreshPolicy(){return acceptPolicy(await rawGet('status'));}
+  async function rememberSession(eventId,groupNo,result) {
+    await local.putSession(API_URL,eventId,groupNo,{token:result.token,credentialId:result.credential_id,expires_at:result.expires_at,accessMode:policy.mode,accessRevision:policy.revision});
+    return result.token;
+  }
   const rawGet=apiGet,rawPost=apiPost,local=V2Local;
   const localState={identity:null,snapshot:null,competitions:null,saving:false,finishing:false};
   const escape=escapeHtml;
@@ -27,8 +40,11 @@
     }
     return cached;
   }
-  function credentialInput(groupNo) {
+  async function credentialInput(groupNo) {
     const eventId=currentEvent.event_id;
+    if(!navigator.onLine)throw Error('Open this group online first. Existing saved scores are retained.');
+    if(policy.mode==='pin-free')return rememberSession(eventId,groupNo,await rawPost({action:'openGroup',eventId,groupNo}));
+    if(policy.mode!=='group-pin')throw Error('Reconnect to verify scoring access settings.');
     return new Promise(resolve=>{
       const d=modal('Group scoring access','<form id="v2Access"><label for="v2Code">Enter your two-digit group PIN</label><input id="v2Code" type="password" inputmode="numeric" pattern="[0-9]{2}" minlength="2" maxlength="2" autocomplete="off" required><button class="primary-button">Open group</button><p id="v2AccessError" role="alert"></p></form>');
       d.addEventListener('close',()=>resolve(null),{once:true});
@@ -36,7 +52,7 @@
         event.preventDefault();const pin=d.querySelector('input').value;
         try {
           const result=await rawPost({action:'openGroup',pin,eventId,groupNo});
-          await local.putSession(API_URL,eventId,groupNo,{token:result.token,credentialId:result.credential_id,expires_at:result.expires_at});
+          await rememberSession(eventId,groupNo,result);
           resolve(result.token);d.close();
         }catch(err){d.querySelector('#v2AccessError').textContent=friendly(err);}
       };
@@ -73,7 +89,7 @@
   }
   function recoveryDialog(message='') {
     return Promise.all([local.pending(),local.recovery()]).then(([pending,archive])=>{
-      const entries=(rows,old)=>rows.map(d=>`<article class="v2-recovery-entry"><strong>Group ${d.identity.groupNo} · hole ${d.request.hole}</strong><p>${escape(old?'Other round/backend · '+d.identity.eventId:'Current round')} · ${escape(({local:'Saved on this device',recovering:'Confirmed recovery queued',syncing:'Syncing','awaiting-server':'Acceptance unconfirmed','needs-review':'Needs review'})[d.status]||d.status)}</p><p>${escape(d.lastError||'Awaiting server acceptance')}</p><details><summary>Stored local scores</summary>${d.request.scores.map(s=>`<p>${escape(s.playerId)}: ${s.status==='pickup'?'BLOB':s.gross}${s.reason?' · '+escape(s.reason):''}</p>`).join('')}</details>${!old?`${d.failureKind==='credential'?`<button data-reauth-group="${d.identity.groupNo}">Sign in to this group</button>`:''}<button data-review-operation="${escape(d.operationId)}">Review server and local scores</button>${d.recoveryIntent?`<button data-resume-operation="${escape(d.operationId)}">Resume confirmed recovery</button>`:''}`:'<p>Retained for export. Open its original round/backend to recover; this round’s Retry will not send it.</p>'}</article>`).join('');
+      const entries=(rows,old)=>rows.map(d=>`<article class="v2-recovery-entry"><strong>Group ${d.identity.groupNo} · hole ${d.request.hole}</strong><p>${escape(old?'Other round/backend · '+d.identity.eventId:'Current round')} · ${escape(({local:'Saved on this device',recovering:'Confirmed recovery queued',syncing:'Syncing','awaiting-server':'Acceptance unconfirmed','needs-review':'Needs review'})[d.status]||d.status)}</p><p>${escape(d.lastError||'Awaiting server acceptance')}</p><details><summary>Stored local scores</summary>${d.request.scores.map(s=>`<p>${escape(s.playerId)}: ${s.status==='pickup'?'BLOB':s.gross}${s.reason?' · '+escape(s.reason):''}</p>`).join('')}</details>${!old?`${d.failureKind==='credential'?`<button data-reauth-group="${d.identity.groupNo}">Reopen this group</button>`:''}<button data-review-operation="${escape(d.operationId)}">Review server and local scores</button>${d.recoveryIntent?`<button data-resume-operation="${escape(d.operationId)}">Resume confirmed recovery</button>`:''}`:'<p>Retained for export. Open its original round/backend to recover; this round’s Retry will not send it.</p>'}</article>`).join('');
       const d=modal('Local score recovery',`<p>${escape(message||'Saved requests stay on this device. Expired access and conflicts pause automatic retries. Review server values before changing a rejected request.')}</p><h3>Current round</h3>${entries(pending.filter(currentRound),false)||'<p>No pending requests for this round.</p>'}<h3>Other rounds and backends</h3>${entries(pending.filter(x=>!currentRound(x)),true)||'<p>No older pending requests.</p>'}<details><summary>Resolved decisions retained on this device (${archive.drafts.filter(x=>x.status==='resolved').length})</summary>${archive.drafts.filter(x=>x.status==='resolved').map(x=>`<article class="v2-recovery-entry"><strong>Group ${x.identity.groupNo} · hole ${x.request.hole}</strong><p>${escape(x.identity.eventId)} · ${escape(x.resolution.outcome)}</p><p>Original local request retained:</p>${x.request.scores.map(s=>`<p>${escape(s.playerId)}: ${s.status==='pickup'?'BLOB':s.gross}${s.reason?' · '+escape(s.reason):''}</p>`).join('')}</article>`).join('')}</details><p>Exports contain private scores and reasons, without bearer tokens, PINs or admin passwords.</p><button id="v2ExportLocal">Export recovery file</button>`);
       d.querySelector('#v2ExportLocal').onclick=()=>exportLocal().catch(error=>alert(friendly(error)));
       d.querySelectorAll('[data-reauth-group]').forEach(button=>button.onclick=()=>{d.close();state.admin='';adminPinValue='';selectGroup(Number(button.dataset.reauthGroup));});
@@ -156,6 +172,7 @@
     if(!API_URL)throw Error('Connect a separate V2 test backend first.');
     const result=action==='competitions'&&state.admin?{...await apiPost({action:'adminCompetitionData',eventId:params?.eventId}),admin_view:true}:
       action==='course'&&currentEvent?.event_id?await rawGet('roundCourse',{eventId:currentEvent.event_id}):await rawGet(action,params);
+    if(action==='status')acceptPolicy(result);
     if(action==='competitions'&&localState.identity?.eventId===(params?.eventId||currentEvent?.event_id)) {
       localState.competitions=result;
       if(localState.snapshot)await local.updateCompetition(localState.identity,result);
@@ -167,7 +184,7 @@
     if(data.action==='roundBootstrap'&&localState.identity&&(localBootstrap||!navigator.onLine))return projection(localState.identity);
     if(!navigator.onLine)throw Error('Offline. This action needs a server connection. Saved scores are retained.');
     if(data.action==='adminLogin') {
-      const result=await rawPost(data);state.admin=result.token;document.getElementById('adminPin').value='';return result;
+      const result=await rawPost(data);state.admin=result.token;document.getElementById('adminPin').value='';await refreshPolicy();return result;
     }
     if(data.action==='completeGroup'&&(await local.pending({backend:API_URL,eventId:data.eventId})).length)throw Error('Finish Group waits for every local saved score to have server acceptance');
     if(data.action==='revealResults'&&(await local.pending({backend:API_URL,eventId:data.eventId})).length)throw Error('Local scores still await server acceptance; review/export them before reveal');
@@ -179,6 +196,10 @@
         if(cached){localState.competitions=cached.competitions;return projection(localState.identity);}
       }
       throw error;
+    }
+    if(data.action==='saveGroups') {
+      const boot=await rawPost({action:'roundBootstrap',credential:state.admin,eventId:data.eventId,groupNo:1});
+      setup.groupVersion=boot.meta?.group_version;setup.attempt=null;
     }
     if(data.action==='createEvent')course=(await rawGet('roundCourse',{eventId:result.event_id})).course;
     if(data.action==='roundBootstrap'&&localState.identity) {
@@ -202,6 +223,7 @@
   selectGroup=async function(groupNo) {
     selectedGroupNumber=Number(groupNo);
     try {
+      if(navigator.onLine)await refreshPolicy();
       if(!state.admin) {
         const cached=await readGroupSession(Number(groupNo));let token=cached?.expires_at>Date.now()?cached.token:null;
         if(token) {
@@ -386,7 +408,7 @@
     if(localState.saving||!localState.identity)return;
     if(state.meta?.locked||state.meta?.revealed_at||currentEvent?.locked){showMessage('scoreMessage','Final results are permanently locked. Pending requests remain available for export.','bad');return;}
     const who=localState.identity,hole=Number(holeOrder[holeIndex]);
-    try{if(!state.admin){const session=await local.getSession(who.backend,who.eventId,who.groupNo);if(!session||session.expires_at<=Date.now()||session.credentialId!==who.credentialId)throw Error('Scoring access expired or changed. Reconnect and sign in again. Pending scores are retained.');}}catch(error){showMessage('scoreMessage','Not saved on this device: '+friendly(error),'bad');return;}
+    try{if(!state.admin){const session=await local.getSession(who.backend,who.eventId,who.groupNo);if(!session||session.expires_at<=Date.now()||session.credentialId!==who.credentialId)throw Error('Scoring access expired or changed. Reconnect and reopen this group. Pending scores are retained.');}}catch(error){showMessage('scoreMessage','Not saved on this device: '+friendly(error),'bad');return;}
     const controls=Array.from(document.querySelectorAll('#scoreScreen button,#scoreScreen select,#scoreScreen textarea')).map(el=>[el,el.disabled]);
     localState.saving=true;controls.forEach(([el])=>el.disabled=true);
     try {
@@ -430,12 +452,12 @@
     if(state.dirty&&!confirm('Discard unsaved selections? Stored local requests will be kept.'))return;
     try{allScores=(await apiPost({action:'roundBootstrap',eventId:currentEvent.event_id,groupNo:selectedGroupNumber})).scores;state.pending=null;state.dirty=false;renderScoring();}catch(err){alert(err.message);}
   };document.getElementById('scoreScreen').append(reload);
-  const access=document.createElement('section');access.className='card v2-credentials';access.innerHTML='<div class="sub-title">Group scoring PINs</div><p>Generate a two-digit PIN after saving the groups. Share it privately with the group scorer. Rotating it ends existing group sessions.</p><label for="v2IssueGroup">Group number</label><input id="v2IssueGroup" type="number" min="1" inputmode="numeric" value="1"><button id="v2Issue" class="secondary-button">Generate / rotate group PIN</button><p id="v2Issued" role="status"></p><button id="v2Recover" class="secondary-button">Recover pending score writes</button><button id="v2AdminLogout">Sign out of admin</button>';
+  const access=document.createElement('section');access.className='card v2-credentials';access.innerHTML='<div id="v2PinControls" hidden><div class="sub-title">Group scoring PINs</div><p>Generate a two-digit PIN after saving the groups. Share it privately with the group scorer. Rotating it ends existing group sessions.</p><label for="v2IssueGroup">Group number</label><input id="v2IssueGroup" type="number" min="1" inputmode="numeric" value="1"><button id="v2Issue" class="secondary-button">Generate / rotate group PIN</button></div><p id="v2Issued" role="status"></p><button id="v2Recover" class="secondary-button">Recover pending score writes</button><button id="v2AdminLogout">Sign out of admin</button>';
   document.getElementById('adminScreen').append(access);
   access.querySelector('#v2Issue').onclick=async()=>{
     const button=access.querySelector('#v2Issue');if(button.disabled)return;button.disabled=true;
     document.getElementById('v2Issued').textContent='Generating PIN… Wait for this request before retrying.';
-    try{const eventId=adminEventId||currentEvent?.event_id;if(!eventId)throw Error('Create a round and save groups first.');const r=await apiPost({action:'issueGroupCredential',eventId,groupNo:Number(document.getElementById('v2IssueGroup').value)});document.getElementById('v2Issued').textContent=r.pin;}
+    try{await refreshPolicy();if(policy.mode!=='group-pin')throw Error('Group PINs are disabled in PIN-free mode');const eventId=adminEventId||currentEvent?.event_id;if(!eventId)throw Error('Create a round and save groups first.');const r=await apiPost({action:'issueGroupCredential',eventId,groupNo:Number(document.getElementById('v2IssueGroup').value)});document.getElementById('v2Issued').textContent=r.pin;}
     catch(error){document.getElementById('v2Issued').textContent=/lock.*timeout/i.test(error.message)?'The test server is busy. Wait for other requests to finish, then retry once. Do not clear browser data.':friendly(error);}
     finally{button.disabled=false;}
   };
@@ -454,7 +476,44 @@
     finally{reveal.disabled=false;}
   };
   access.querySelector('#v2AdminLogout').onclick=()=>{state.admin='';adminPinValue='';document.getElementById('v2Issued').textContent='';showScreen('homeScreen');};
-  const connection=document.createElement('section');connection.className='v2-connection';connection.innerHTML='<strong>V2 development · separate test backend only</strong><form id="v2Connect"><label for="v2Endpoint">Test Apps Script web-app URL</label><input id="v2Endpoint" type="url" autocomplete="off" placeholder="https://script.google.com/macros/s/…/exec" required><button>Connect test backend</button><p id="v2ConnectionStatus" role="status"></p></form>';
+  // Keep setup controls within the existing V2 adapter; no V1 functions are edited.
+  const saveGroupsOriginal=saveGroupSetup,createOriginal=createRound;
+  createRound=async function(){if(setup.creating)return;setup.creating=true;try{await createOriginal();}finally{setup.creating=false;}};
+  saveGroupSetup=async function(){
+    if(setup.saving)return;setup.saving=true;
+    try{await saveGroupsOriginal();
+      if(setup.groupVersion){
+        document.querySelector('#adminCompetitionsCard .sub-title').textContent='Select Comps & Start Round';
+        document.querySelector('#adminCompetitionsCard .primary-button').textContent='Save Comps & Start Round';
+        showMessage('drawMessage','Groups saved ✓. Select competitions, then start the round.','good');
+      }
+    }finally{setup.saving=false;}
+  };
+  saveAdminCompetitions=async function(){
+    if(setup.starting)return;
+    const button=document.querySelector('#adminCompetitionsCard .primary-button'),eventId=adminEventId;
+    if(!eventId||!state.admin){showMessage('adminCompetitionMessage','Admin sign-in and saved groups are required.','bad');return;}
+    setup.starting=true;button.disabled=true;button.textContent='Saving…';
+    try{
+      const boot=await rawPost({action:'roundBootstrap',credential:state.admin,eventId,groupNo:1});
+      const groupVersion=setup.groupVersion||boot.meta?.group_version;
+      const nearest=document.getElementById('adminNearestEnabled').checked;
+      const choices={eventId,groupVersion,nearest_enabled:nearest,nearest_holes:nearest?[...document.querySelectorAll('.adminPinHole:checked')].map(el=>Number(el.value)):[],
+        blind_enabled:document.getElementById('adminBlindEnabled').checked,team234_enabled:document.getElementById('admin234Enabled').checked};
+      if(nearest&&!choices.nearest_holes.length)throw Error('Select at least one par-3 hole.');
+      const fingerprint=JSON.stringify(choices);
+      if(setup.attempt&&setup.attempt.fingerprint!==fingerprint)throw Error('Start choices changed after a submission. Retry the original choices or reload admin setup.');
+      setup.attempt ||= {fingerprint,request:{action:'startRound',operationId:id(),...choices}};
+      await apiPost(setup.attempt.request);
+      button.textContent='Saved ✓';showMessage('adminCompetitionMessage','Saved ✓','good');
+      // A completed start remains retryable if refreshing the menu fails.
+      await new Promise(resolve=>setTimeout(resolve,650));
+      const current=await rawGet('currentEvent');currentEvent=current.event;
+      showScreen('homeScreen');
+    }catch(error){showMessage('adminCompetitionMessage','Round start unconfirmed: '+friendly(error)+' Retry the same choices; saved data is retained.','bad');}
+    finally{setup.starting=false;button.disabled=false;if(button.textContent!=='Saved ✓')button.textContent='Save Comps & Start Round';}
+  };
+    const connection=document.createElement('section');connection.className='v2-connection';connection.innerHTML='<strong>V2 development · separate test backend only</strong><form id="v2Connect"><label for="v2Endpoint">Test Apps Script web-app URL</label><input id="v2Endpoint" type="url" autocomplete="off" placeholder="https://script.google.com/macros/s/…/exec" required><button>Connect test backend</button><p id="v2ConnectionStatus" role="status"></p></form>';
   document.body.prepend(connection);document.getElementById('v2Endpoint').value=API_URL;
   document.getElementById('v2Connect').onsubmit=async e=>{
     e.preventDefault();const value=document.getElementById('v2Endpoint').value.trim();
