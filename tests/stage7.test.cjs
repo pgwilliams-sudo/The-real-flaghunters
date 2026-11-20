@@ -85,7 +85,7 @@ test('PIN-free queued saves retain their IDs and payloads when a mode change rej
  vm.createContext(ctx);for(const path of ['v2-local.js','v2-sync.js'])vm.runInContext(fs.readFileSync(path,'utf8'),ctx);
  const local=ctx.V2Local,who={backend:'synthetic-stage7',eventId:'v2-event',groupNo:1,credentialId:opened.credential_id};
  const boot=h.post({action:'roundBootstrap',credential:opened.token,eventId:who.eventId,groupNo:1});await local.prepare(who,boot);
- const request={action:'saveHoleScores',eventId:who.eventId,hole:1,scores:[{playerId:'p1',status:'scored',gross:5,expectedRevision:0,reason:''}]};
+ const request={action:'saveHoleScores',eventId:who.eventId,hole:1,scores:[1,2,3,4].map(i=>({playerId:'p'+i,status:'scored',gross:5,expectedRevision:0,reason:''}))};
  const draft=await local.saveDraft(who,request,crypto.randomUUID());
  h.properties.V2_SCORING_ACCESS_MODE='group-pin';
  const sync=ctx.V2Sync.create({local,backend:who.backend,activeEvent:()=>who.eventId,credential:async()=>({token:opened.token}),transport:async data=>{const r=h.post(data);if(!r.ok)throw Error(r.error);return r;},schedule:()=>0,cancel:()=>{}});
