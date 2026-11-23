@@ -515,15 +515,22 @@
     }catch(error){showMessage('adminCompetitionMessage','Round start unconfirmed: '+friendly(error)+' Retry the same choices; saved data is retained.','bad');}
     finally{setup.starting=false;button.disabled=false;if(button.textContent!=='Saved ✓')button.textContent='Save Comps & Start Round';}
   };
-    const connection=document.createElement('section');connection.className='v2-connection';connection.innerHTML='<strong>V2 development · separate test backend only</strong><form id="v2Connect"><label for="v2Endpoint">Test Apps Script web-app URL</label><input id="v2Endpoint" type="url" autocomplete="off" placeholder="https://script.google.com/macros/s/…/exec" required><button>Connect test backend</button><p id="v2ConnectionStatus" role="status"></p></form>';
-  document.body.prepend(connection);document.getElementById('v2Endpoint').value=API_URL;
-  document.getElementById('v2Connect').onsubmit=async e=>{
-    e.preventDefault();const value=document.getElementById('v2Endpoint').value.trim();
-    try{if((await local.pending()).length&&!confirm('Some local scores lack server acceptance. Switching backends keeps them stored, but does not upload them. Review/export recovery data first if needed. Continue?'))return;const url=new URL(value);if(url.protocol!=='https:'||url.hostname!=='script.google.com'||!/^\/macros\/s\/[^/]+\/exec$/.test(url.pathname)||url.search||url.hash)throw new Error('Enter a valid Apps Script test web-app URL.');
-      const r=await fetch(value+'?action=status'),data=await r.json();if(!data.ok||data.api_generation!=='v2-phase1')throw new Error('This endpoint is not the V2 Phase 1 backend.');
-      localStorage.setItem('flaghunters.v2.api',value);location.reload();
-    }catch(err){document.getElementById('v2ConnectionStatus').textContent=err.message;}
-  };
+  const connection=document.createElement('section');
+  connection.className='v2-connection';
+  document.body.prepend(connection);
+  if(document.documentElement.dataset.v2FixedTestApi) {
+    connection.textContent='V2 · isolated test scoring';
+  } else {
+    connection.innerHTML='<strong>V2 development · separate test backend only</strong><form id="v2Connect"><label for="v2Endpoint">Test Apps Script web-app URL</label><input id="v2Endpoint" type="url" autocomplete="off" placeholder="https://script.google.com/macros/s/…/exec" required><button>Connect test backend</button><p id="v2ConnectionStatus" role="status"></p></form>';
+    document.getElementById('v2Endpoint').value=API_URL;
+    document.getElementById('v2Connect').onsubmit=async e=>{
+      e.preventDefault();const value=document.getElementById('v2Endpoint').value.trim();
+      try{if((await local.pending()).length&&!confirm('Some local scores lack server acceptance. Switching backends keeps them stored, but does not upload them. Review/export recovery data first if needed. Continue?'))return;const url=new URL(value);if(url.protocol!=='https:'||url.hostname!=='script.google.com'||!/^\/macros\/s\/[^/]+\/exec$/.test(url.pathname)||url.search||url.hash)throw new Error('Enter a valid Apps Script test web-app URL.');
+        const r=await fetch(value+'?action=status'),data=await r.json();if(!data.ok||data.api_generation!=='v2-phase1')throw new Error('This endpoint is not the V2 Phase 1 backend.');
+        localStorage.setItem('flaghunters.v2.api',value);location.reload();
+      }catch(err){document.getElementById('v2ConnectionStatus').textContent=err.message;}
+    };
+  }
   async function preparedGroups() {
     const holder=document.getElementById('v2PreparedGroups');
     try {

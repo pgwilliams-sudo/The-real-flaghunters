@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-v2-fixed-test-api="">
 
 <head>
 <link rel="apple-touch-icon" href="app-icon.PNG">
@@ -1265,7 +1265,8 @@ WHS Handicap Index. Use + for plus handicaps.
 
 <script>
 
-const API_URL = localStorage.getItem('flaghunters.v2.api') || '';
+const API_URL = document.documentElement.dataset.v2FixedTestApi ||
+  localStorage.getItem('flaghunters.v2.api') || '';
 
 
 let currentEvent = null;

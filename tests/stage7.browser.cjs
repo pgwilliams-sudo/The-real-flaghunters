@@ -1,23 +1,32 @@
 // Focused Stage 7 integration: synthetic HTTP backend + real worker/IndexedDB; no Google calls.
-const http=require('node:http'),fs=require('node:fs'),assert=require('node:assert/strict');
+const http=require('node:http'),fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
 const {chromium}=require('playwright'),{harness}=require('./harness.cjs');
 (async()=>{
+ const releaseDirectory=process.argv[2],publicTest=Boolean(releaseDirectory);
  const h=harness();delete h.properties.V2_SCORING_ACCESS_MODE;
  const events=h.sheets.get('Events').rows;events.push(events.splice(1,1)[0]);
  const files=['index.html','v2-app-sw.js','v2.css','v2.js','v2-local.js','v2-sync.js','v2-recovery.js','v2-offline.js','app-icon.PNG'];
  const server=http.createServer((req,res)=>{
   const file=req.url==='/'?'index.html':req.url.slice(1);
   if(!files.includes(file)){res.writeHead(404);return res.end();}
-  res.writeHead(200,{'Content-Type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':file.endsWith('.PNG')?'image/png':'text/html','Cache-Control':'no-store'});res.end(fs.readFileSync(file));
+  res.writeHead(200,{'Content-Type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':file.endsWith('.PNG')?'image/png':'text/html','Cache-Control':'no-store'});res.end(fs.readFileSync(path.join(releaseDirectory||'.',file)));
  });
  await new Promise(r=>server.listen(0,'127.0.0.1',r));
- const origin='http://127.0.0.1:'+server.address().port+'/',endpoint='https://script.google.com/macros/s/stage7-fixture/exec',calls=[],errors=[];
+ const origin='http://127.0.0.1:'+server.address().port+'/';
+ const endpoint=publicTest?'https://script.google.com/macros/s/AKfycbzygKEHMYWvZPYZjdEjCcFaG4VkYqqxRTnjckv3Y053PDUbejl8YQ6-MCEaNjVyIiEP/exec':'https://script.google.com/macros/s/stage7-fixture/exec';
+ const storedEndpoint=publicTest?'https://script.google.com/macros/s/other-fixture/exec':endpoint;
+ const calls=[],errors=[],unexpectedRequests=[];
  const browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH||chromium.executablePath(),headless:true,args:['--no-sandbox']});
  const context=await browser.newContext({viewport:{width:820,height:1180}});let offline=false,loseStart=true;
- await context.addInitScript(url=>localStorage.setItem('flaghunters.v2.api',url),endpoint);
- await context.route(endpoint+'**',async route=>{
+ await context.addInitScript(url=>localStorage.setItem('flaghunters.v2.api',url),storedEndpoint);
+ await context.route('**/*',async route=>{
+  const req=route.request();
+  if(req.url().startsWith(origin))return route.continue();
+  if(req.url()!==endpoint&&!req.url().startsWith(endpoint+'?')){
+   unexpectedRequests.push(req.url());return route.abort();
+  }
   if(offline)return route.abort();
-  const req=route.request(),data=req.method()==='POST'?JSON.parse(req.postData()):null;
+  const data=req.method()==='POST'?JSON.parse(req.postData()):null;
   if(data)calls.push(data);
   const result=data?h.post(data):h.ctx.doGet({parameter:Object.fromEntries(new URL(req.url()).searchParams)});
   if(data?.action==='startRound'&&loseStart){loseStart=false;return route.abort();}
@@ -27,7 +36,13 @@ const {chromium}=require('playwright'),{harness}=require('./harness.cjs');
  async function observe(p,fn,arg){const end=Date.now()+30000;while(!await p.evaluate(fn,arg)){if(Date.now()>end)throw Error('Stage 7 observation timed out');await new Promise(resolve=>setTimeout(resolve,20));}}
  async function pending(p,n){await observe(p,async count=>(await V2Local.pending()).length===count,n);}
  try{
-  let p=await open();await p.getByRole('button',{name:/Enter Scores/}).click();await p.locator('.group-button').first().click();await p.locator('#scoreScreen.active').waitFor();
+  let p=await open();
+  if(publicTest){
+   assert.equal(await p.locator('#v2Connect').count(),0);
+   assert.equal(await p.evaluate(()=>API_URL),endpoint);
+   assert.equal(await p.evaluate(()=>localStorage.getItem('flaghunters.v2.api')),storedEndpoint);
+  }
+  await p.getByRole('button',{name:/Enter Scores/}).click();await p.locator('.group-button').first().click();await p.locator('#scoreScreen.active').waitFor();
   assert.equal(await p.locator('#v2Code').count(),0);
   assert.equal(calls.find(c=>c.action==='openGroup').pin,undefined);
   await p.locator('#v2PrepareOffline').click();await p.locator('#v2OfflineStatus').filter({hasText:/App assets prepared/}).waitFor({timeout:40000});
@@ -83,6 +98,8 @@ const {chromium}=require('playwright'),{harness}=require('./harness.cjs');
   assert.equal(h.ctx.v2Meta(eventId).started_at,started);
   assert.equal(h.sheets.get('Competitions').rows.filter(r=>r[0]===eventId).length,1);
   assert.deepEqual(errors,[]);
+  assert.deepEqual(unexpectedRequests,[]);
+  if(publicTest)console.log('PASS Stage 8: packaged frontend ignored alternate stored endpoint and contacted only the pinned test endpoint');
   console.log('PASS Stage 7: configurable PIN mode, hidden dormant PIN controls, duplicate setup guards, lost-response retry, Saved confirmation and Home');
  }finally{await context.close();await browser.close();await new Promise(r=>server.close(r));}
 })().catch(error=>{console.error(error);process.exitCode=1;});
