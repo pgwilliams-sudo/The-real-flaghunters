@@ -1060,13 +1060,7 @@ function getLeaderboard(eventId) {
   return v2Leaderboard(eventId);
 }
 
-function getSeasonStats() {
-  const events =
-    getRowsAsObjects(sheetNamed('Events'))
-      .filter(e =>
-        String(e.status).toLowerCase() ===
-        'complete' && v2ResultsRevealed(String(e.event_id))
-      );
+function getSeasonStats(events = v2CompletedResults()) {
 
   const groups =
     getRowsAsObjects(sheetNamed('Groups'));
@@ -1124,7 +1118,8 @@ function getSeasonStats() {
           String(s.player_id) === id
         );
 
-      if (playerScores.length !== 18)
+      if (!Array.from({length: 18}, (_, i) => i + 1)
+        .every(hole => playerScores.some(s => Number(s.hole) === hole)))
         return;
 
       const p = ensurePlayer(id);

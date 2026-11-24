@@ -107,8 +107,14 @@ test('active legacy numeric corrections are audited without inventing snapshots 
   const current=h.ctx.getScores('legacy-event')[0];assert.equal(current.gross,4);assert.equal(current.course_snapshot_id,null);assert.equal(current.calculation_source,'legacy_live_course_not_historical');assert.equal(h.sheets.get('Scores').rows[1][3],5);assert.equal(h.ctx.v2Meta('legacy-event'),null);
   assert.match(h.save({credential:session.token,eventId:'legacy-event',scores:[{playerId:'p1',status:'pickup',gross:null,expectedRevision:1,reason:'Test'}]}).error,/Legacy/);
 });
-test('Eclectic candidates exclude pickups but retain numeric zero-point scores',()=>{
-  const h=harness();h.save();h.save({hole:2,scores:[{playerId:'p1',status:'scored',gross:12,expectedRevision:0}]});const candidates=h.ctx.v2EclecticCandidates('v2-event');assert.equal(candidates.length,1);assert.equal(candidates[0].gross,12);
+test('Eclectic candidates exclude pickups and numeric BLOBs',()=>{
+  const h=harness();
+  assert.equal(h.save().ok,true);
+  assert.equal(h.save({hole:2,scores:[{playerId:'p1',status:'scored',gross:12,expectedRevision:0}]}).ok,true);
+  assert.equal(h.save({hole:3,scores:[{playerId:'p1',status:'scored',gross:3,expectedRevision:0}]}).ok,true);
+  const candidates=h.ctx.v2EclecticCandidates('v2-event');
+  assert.equal(candidates.length,1);
+  assert.equal(candidates[0].gross,3);
 });
 test('new events get V2 course snapshots; failed setup never becomes a writable legacy event',()=>{
   const h=harness(),r=h.post({action:'createEvent',credential:h.admin,tee:'White'});assert.equal(r.ok,true);assert.equal(h.ctx.v2Meta(r.event_id).schema_version,2);assert.equal(h.ctx.getEventById(r.event_id).status,'active');

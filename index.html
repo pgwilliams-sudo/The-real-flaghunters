@@ -609,11 +609,11 @@
     >
 
       <strong>
-        ⛳ Enter Scores
+        Play
       </strong>
 
       <span>
-        Score your group hole by hole
+        Choose your group and enter scores
       </span>
 
     </button>
@@ -625,11 +625,11 @@
     >
 
       <strong>
-        🏆 Live Leaderboard
+        Results
       </strong>
 
       <span>
-        Gross, net and Stableford
+        Leaderboards, scorecards and competitions
       </span>
 
     </button>
@@ -641,28 +641,24 @@
     >
 
       <strong>
-        📊 Season
+        Season
       </strong>
 
       <span>
-        Eclectics, POTY and statistics
+        Player of the Year, Eclectics and statistics
       </span>
 
     </button>
 
 
     <button
-      class="menu-button"
+      class="v2-admin-link"
       onclick="openAdmin()"
     >
 
       <strong>
-        ⚙️ Admin Setup
+        Admin
       </strong>
-
-      <span>
-        Set up Saturday's round
-      </span>
 
     </button>
 
@@ -695,6 +691,7 @@
     </div>
 
     <div id="groupList"></div>
+    <p id="v2GroupReadiness" class="v2-play-status" role="status" hidden></p>
 
   </main>
 
@@ -760,6 +757,9 @@
       id="scorerBanner"
       class="scorer-banner"
     ></div>
+    <p id="v2ScoreStatus" class="v2-play-status" role="status" hidden></p>
+    <p id="v2ScoreReadiness" class="v2-play-status" role="status" hidden></p>
+    <button id="v2ScoreRecoveryLink" type="button" class="v2-text-button" hidden>Score Recovery</button>
 
     <div
       class="hole-header"
@@ -860,13 +860,14 @@
     </button>
 
     <div class="section-title">
-      Live Leaderboard
+      Results
     </div>
 
-    <div
-      id="leaderEvent"
-      class="message info hidden"
-    ></div>
+    <div id="v2ResultControls" class="v2-filters" hidden>
+      <label for="v2ResultRound">Round</label>
+      <select id="v2ResultRound" onchange="chooseResultRound(this.value)"></select>
+      <button type="button" class="secondary-button" onclick="openCompetitions()">Competition results</button>
+    </div>
 
     <div class="card">
 
@@ -876,9 +877,6 @@
 
     </div>
 
-    <div class="refresh-note">
-      Updates automatically
-    </div>
 
   </main>
 
@@ -902,26 +900,17 @@
       Season
     </div>
 
-    <div class="card">
-
-      <div class="sub-title">
-        Coming next
+    <div id="v2SeasonControls" class="v2-filters" hidden>
+      <label for="v2SeasonYear">Season year</label>
+      <select id="v2SeasonYear"></select>
+      <div id="v2SeasonViews" class="v2-segments" role="group" aria-label="Season view">
+        <button type="button" data-view="poty" aria-pressed="true">POTY</button>
+        <button type="button" data-view="gross" aria-pressed="false">Gross Eclectic</button>
+        <button type="button" data-view="net" aria-pressed="false">Net Eclectic</button>
+        <button type="button" data-view="stats" aria-pressed="false">Statistics</button>
       </div>
-
-      <p>
-        Completed Saturday rounds will feed
-        the Gross Eclectic, Net Eclectic,
-        POTY, appearances, Stableford averages,
-        blobs, birdies and eagles.
-      </p>
-
-      <p class="small-label">
-        Weekly scoring is being tested first
-        before we let an eclectic spreadsheet
-        acquire consciousness.
-      </p>
-
     </div>
+    <div id="v2SeasonPanel" class="card" aria-busy="false"></div>
 
   </main>
 
@@ -1423,12 +1412,7 @@ async function initialise() {
 
   try {
 
-    const [
-      status,
-      eventData,
-      playerData,
-      courseData
-    ] =
+    const [, eventData, playerData, courseData] =
     await Promise.all([
 
       apiGet('status'),
@@ -1457,7 +1441,6 @@ async function initialise() {
         'headerStatus'
       )
       .textContent =
-        status.message ||
         'Saturday Golf';
 
 
@@ -1480,8 +1463,7 @@ async function initialise() {
 
     showMessage(
       'homeMessage',
-      'Connection problem: ' +
-      err.message,
+        'Round details could not be loaded. Check your connection and try again.',
       'bad'
     );
 
@@ -1533,7 +1515,8 @@ function formatDate(value) {
       {
         day: 'numeric',
         month: 'short',
-        year: 'numeric'
+        year: 'numeric',
+        timeZone: 'Europe/London'
       }
     );
 
@@ -3040,258 +3023,89 @@ function returnToGroups() {
 ------------------------- */
 
 
-async function openLeaderboard() {
+let resultRounds = [];
+let selectedResultRound = null;
+let resultRequest = 0;
 
-  if (
-    leaderboardTimer
-  ) {
+async function openLeaderboard(keepRound = false) {
+  if (leaderboardTimer) clearInterval(leaderboardTimer);
+  showScreen('leaderboardScreen');
+  const table = document.getElementById('leaderboardTable');
+  const controls = document.getElementById('v2ResultControls');
 
-    clearInterval(
-      leaderboardTimer
-    );
-
+  if (keepRound && selectedResultRound) {
+    return chooseResultRound(selectedResultRound.event_id);
   }
 
+  const request = ++resultRequest;
+  controls.hidden = true;
+  table.textContent = 'Loading rounds…';
+  try {
+    const data = await apiGet('rounds');
+    if (request !== resultRequest) return;
+    resultRounds = data.rounds;
+    if (!resultRounds.length) {
+      selectedResultRound = null;
+      table.textContent = 'No rounds available yet.';
+      return;
+    }
 
-  showScreen(
-    'leaderboardScreen'
-  );
-
-
-  await refreshLeaderboard();
-
-
-  leaderboardTimer =
-    setInterval(
-      refreshLeaderboard,
-      8000
-    );
-
+    const select = document.getElementById('v2ResultRound');
+    select.replaceChildren(...resultRounds.map(round => {
+      const label = [formatDate(round.date), round.course, round.tee].filter(Boolean).join(' · ');
+      const status = round.status === 'active' ? ' · In play' : round.revealed ? '' : ' · Awaiting reveal';
+      return new Option(label + status, round.event_id);
+    }));
+    controls.hidden = false;
+    await chooseResultRound(data.current_event_id);
+  } catch (error) {
+    if (request === resultRequest) {
+      table.textContent = navigator.onLine ? 'Results are unavailable. Try again shortly.' : 'Connect to view round results.';
+    }
+  }
 }
 
+async function chooseResultRound(eventId) {
+  if (leaderboardTimer) clearInterval(leaderboardTimer);
+  selectedResultRound = resultRounds.find(round => round.event_id === eventId);
+  if (!selectedResultRound) return;
 
+  document.getElementById('v2ResultRound').value = eventId;
+  document.getElementById('leaderboardTable').textContent = 'Loading results…';
+  await refreshLeaderboard();
+  if (selectedResultRound?.event_id === eventId && !selectedResultRound.revealed &&
+      document.getElementById('leaderboardScreen').classList.contains('active')) {
+    leaderboardTimer = setInterval(refreshLeaderboard, 8000);
+  }
+}
 
 async function refreshLeaderboard() {
-
+  const eventId = selectedResultRound?.event_id;
+  if (!eventId) return;
+  const request = ++resultRequest;
   try {
-
-    const eventData =
-      await apiGet(
-        'currentEvent'
-      );
-
-
-    currentEvent =
-      eventData.event;
-
-
-    if (!currentEvent) {
-
-      document
-        .getElementById(
-          'leaderboardTable'
-        )
-        .innerHTML =
-          'No round available.';
-
-      return;
-
+    const data = await apiGet('leaderboard', {eventId});
+    if (request === resultRequest) {
+      selectedResultRound.revealed = data.revealed;
+      if (data.revealed) clearInterval(leaderboardTimer);
+      renderLeaderboard(data.leaderboard || []);
     }
-
-
-    document
-      .getElementById(
-        'leaderEvent'
-      )
-      .className =
-        'message info';
-
-
-    document
-      .getElementById(
-        'leaderEvent'
-      )
-      .textContent =
-        formatEvent(
-          currentEvent
-        );
-
-
-    const data =
-      await apiGet(
-        'leaderboard',
-        {
-          eventId:
-            currentEvent.event_id
-        }
-      );
-
-
-    renderLeaderboard(
-      data.leaderboard || []
-    );
-
+  } catch (error) {
+    if (request === resultRequest) {
+      document.getElementById('leaderboardTable').textContent =
+        navigator.onLine ? 'Results are unavailable. Try again shortly.' : 'Connect to view round results.';
+    }
   }
-
-  catch (err) {
-
-    document
-      .getElementById(
-        'leaderboardTable'
-      )
-      .textContent =
-        err.message;
-
-  }
-
 }
 
-
-
-function renderLeaderboard(
-  rows
-) {
-
-  const container =
-    document.getElementById(
-      'leaderboardTable'
-    );
-
-
-  if (!rows.length) {
-
-    container.innerHTML =
-      'No scores yet.';
-
-    return;
-
-  }
-
-
-  let html = `
-
-    <table>
-
-      <thead>
-
-        <tr>
-          <th>Player</th>
-          <th>Gross</th>
-          <th>Net</th>
-          <th>Pts</th>
-          <th>Blobs</th>
-          <th>Birdies</th>
-          <th>Eagles</th>
-          <th>Holes</th>
-        </tr>
-
-      </thead>
-
-      <tbody>
-
-  `;
-
-
-  rows.forEach(
-    (row, index) => {
-
-      html += `
-
-        <tr>
-
-          <td>
-
-            <span
-              class="leader-pos"
-            >
-              ${index + 1}.
-            </span>
-
-            <span
-              class="leader-name"
-            >
-              ${escapeHtml(
-                row.name
-              )}
-            </span>
-
-          </td>
-
-          <td>
-            ${row.gross_incomplete ? '—' : (row.gross || 0)}
-          </td>
-
-          <td>
-            ${row.net_incomplete ? '—' : (row.net || 0)}
-          </td>
-
-          <td
-            class="big-points"
-          >
-            ${row.stableford || 0}
-          </td>
-
-          <td>
-            ${row.blobs || 0}
-          </td>
-
-          <td>
-            ${row.birdies || 0}
-          </td>
-
-          <td>
-            ${row.eagles || 0}
-          </td>
-
-          <td>
-            ${row.holes || 0}/18
-          </td>
-
-        </tr>
-
-      `;
-
-    }
-  );
-
-
-  html += `
-
-      </tbody>
-
-    </table>
-
-  `;
-
-
-  container.innerHTML =
-    html;
-
-}
-
+function renderLeaderboard() {}
 
 function closeLeaderboard() {
-
-  if (
-    leaderboardTimer
-  ) {
-
-    clearInterval(
-      leaderboardTimer
-    );
-
-    leaderboardTimer = null;
-
-  }
-
-
-  showScreen(
-    'homeScreen'
-  );
-
+  ++resultRequest;
+  clearInterval(leaderboardTimer);
+  leaderboardTimer = null;
+  showScreen('homeScreen');
 }
-
-
 
 /* -------------------------
    SEASON
@@ -4748,9 +4562,11 @@ function cssEscape(value) {
   let event = null;
   let groups = [];
   let scores = [];
-  let courseRows = [];
   let competitionData = null;
   let competitionPin = '';
+  const getPublicResult = apiGet;
+  let loadSequence = 0;
+  let adminCanDraw = false;
 
   function el(id) {
     return document.getElementById(id);
@@ -4778,17 +4594,6 @@ function cssEscape(value) {
 
   function members() {
     return groups;
-  }
-
-  function parThreeHoles() {
-    return courseRows
-      .filter(h =>
-        String(h.course) === String(event.course) &&
-        String(h.tee) === String(event.tee) &&
-        Number(h.par) === 3
-      )
-      .map(h => Number(h.hole))
-      .sort((a, b) => a - b);
   }
 
   function playerName(id) {
@@ -4833,26 +4638,24 @@ function cssEscape(value) {
   }
 
   async function load() {
-    const current = await apiGet('currentEvent');
-    event = current.event;
-
-    if (!event) {
-      throw new Error('No round available');
-    }
-
-    const id = event.event_id;
-
-    const results = await Promise.all([
-      apiGet('competitions', { eventId: id }),
-      apiGet('groups', { eventId: id }),
-      apiGet('scores', { eventId: id }),
-      apiGet('course')
+    const round = selectedResultRound;
+    if (!round) throw new Error('Choose a round in Results.');
+    const request = ++loadSequence;
+    const params = {eventId: round.event_id};
+    const [results, groupData, scoreData, adminData] = await Promise.all([
+      getPublicResult('competitions', params),
+      getPublicResult('groups', params),
+      getPublicResult('scores', params),
+      adminPinValue && !round.revealed
+        ? apiPost({action: 'adminCompetitionData', ...params}).catch(() => null) : null
     ]);
-
-    competitionData = results[0];
-    groups = results[1].groups || [];
-    scores = results[2].scores || [];
-    courseRows = results[3].course || [];
+    if (request !== loadSequence) return false;
+    event = round;
+    competitionData = adminData ? {...adminData, results_partial: results.results_partial} : results;
+    groups = groupData.groups || [];
+    scores = scoreData.scores || [];
+    adminCanDraw = Boolean(adminData?.all_groups_finished && !adminData.blind_pairs?.length);
+    return true;
   }
 
   
@@ -4880,7 +4683,7 @@ function renderNearestPin() {
     const id = String(winners[hole] || '');
     const name = id && id !== 'none'
       ? playerName(id)
-      : 'No leader yet';
+      : event.status === 'complete' ? 'No result recorded' : 'No leader yet';
 
     html += `
       <p>
@@ -4895,25 +4698,12 @@ function renderNearestPin() {
 
 
   function renderBlindPairs() {
-    const players = members();
     const pairs = competitionData.blind_pairs || [];
-
-    
-const complete =
-  players.length > 0 &&
-  (competitionData.admin_view || players.every(p =>
-    playerFinished(p.player_id)
-  )) &&
-  competitionData.all_groups_finished === true;
 
 
     let html = `
       <div class="card">
         <div class="sub-title">🤝 Blind Pairs</div>
-        <p class="small-label">
-          Draw after everyone finishes.
-          An even number of players is required.
-        </p>
     `;
 
     if (pairs.length) {
@@ -4947,25 +4737,11 @@ const complete =
         `;
       });
     } else {
-      const even =
-        players.length >= 2 &&
-        players.length % 2 === 0;
-
       html += `
-        <p>
-          ${!even
-            ? 'An even number of players is required.'
-            : !complete
-              ? 'Waiting for all players to finish.'
-              : 'All players finished. Ready to draw.'}
-        </p>
-        <button
-          class="primary-button"
-          onclick="drawCompetitionPairsUI()"
-          ${!even || !complete ? 'disabled' : ''}
-        >
-          Draw Blind Pairs
-        </button>
+        <p>${event.status === 'complete' && event.revealed
+          ? 'No draw recorded.'
+          : 'Blind Pairs results appear after clubhouse reveal.'}</p>
+        ${adminCanDraw ? '<button class="primary-button" onclick="drawCompetitionPairsUI()">Draw Blind Pairs</button>' : ''}
       `;
     }
 
@@ -5108,6 +4884,8 @@ function render() {
   const config = competitionData.config || {};
 
   el('competitionContent').innerHTML =
+    (competitionData.results_partial ? '<p class="v2-play-status">Partial results until clubhouse reveal.</p>' : '') +
+    (!config.nearest_enabled && !config.blind_enabled && !config.team234_enabled ? '<p>No competitions for this round.</p>' : '') +
     renderGroupStatus() +
     renderNearestPin() +
     (config.blind_enabled ? renderBlindPairs() : '') +
@@ -5115,7 +4893,10 @@ function render() {
 }
 
   async function open() {
+    clearInterval(leaderboardTimer);
+    leaderboardTimer = null;
     showScreen('competitionScreen');
+    el('competitionRound').textContent = formatEvent(selectedResultRound);
 
     el('competitionContent').textContent =
       'Loading competitions…';
@@ -5124,8 +4905,7 @@ function render() {
       'message hidden';
 
     try {
-      await load();
-      render();
+      if (await load()) render();
     } catch (err) {
       el('competitionContent').textContent =
         err.message;
@@ -5148,8 +4928,7 @@ function render() {
         ...details
       });
 
-      await load();
-      render();
+      if (await load()) render();
 
       message('Saved successfully.', false);
     } catch (err) {
@@ -5203,25 +4982,6 @@ function render() {
   document.addEventListener(
     'DOMContentLoaded',
     function () {
-      const home = el('homeScreen');
-
-      const button = document.createElement('button');
-
-      button.className = 'menu-button';
-      button.innerHTML = `
-        <strong>🎯 Saturday Competitions</strong>
-        <span>
-          Nearest the Pin, Blind Pairs and 2/3/4
-        </span>
-      `;
-
-      button.onclick = open;
-
-      home.insertBefore(
-        button,
-        el('homeMessage')
-      );
-
       const screen = document.createElement('main');
 
       screen.id = 'competitionScreen';
@@ -5230,14 +4990,15 @@ function render() {
       screen.innerHTML = `
         <button
           class="back"
-          onclick="showScreen('homeScreen')"
+          onclick="openLeaderboard(true)"
         >
-          ← Home
+          ← Results
         </button>
 
         <div class="section-title">
-          Saturday Competitions
+          Competition results
         </div>
+        <p id="competitionRound" class="v2-play-status"></p>
 
         <div
           id="competitionMessage"

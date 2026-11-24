@@ -27,11 +27,16 @@ async function fixture(browser,{fillOtherHoles=false,processBeforeHold=false}={}
   });
   async function page() {const p=await context.newPage();p.setDefaultTimeout(15000);p.on('pageerror',e=>errors.push(e.message));p.on('dialog',d=>d.accept());await p.goto(origin);return p;}
   async function openGroup(p) {
-    await p.getByRole('button',{name:/Enter Scores/}).click();await p.locator('.group-button').first().click();
+    await p.getByRole('button',{name:/^Play/}).click();await p.locator('.group-button').first().click();
     if(!requests.some(r=>r.action==='openGroup')) {await p.locator('#v2Code').fill(h.groupPin);await p.getByRole('button',{name:'Open group',exact:true}).click();}
     await p.locator('#scoreScreen.active').waitFor();
   }
   return {h,context,requests,errors,page,openGroup,offline:value=>{offline=value;},loseRecovery:()=>{loseRecovery=true;},malformedHistory:value=>{malformedHistory=value;},hold:()=>{hold=true;},release:()=>{hold=false;release();}};
+}
+async function clickRecovery(page,id) {
+  const panel=page.locator('#v2ScoreRecovery');
+  if(!await panel.evaluate(el=>el.open))await panel.locator('summary').click();
+  await panel.locator('#'+id).click();
 }
 async function fillPickups(page){for(const button of await page.locator('.v2-pickup').all())await button.tap();}
 async function browserWait(page,fn,arg){const end=Date.now()+15000;while(!await page.evaluate(fn,arg)){if(Date.now()>end)throw Error('Browser state observation timed out');await new Promise(r=>setTimeout(r,10));}}
@@ -56,13 +61,13 @@ async function scenario(browser,label) {
     await observe(()=>f.requests.filter(r=>r.action==='saveHoleScores').length>=2);
     assert.equal(f.requests.filter(r=>r.action==='saveHoleScores').length,2,'Stage 3 resumes the ordered queue after the expired tab lease');
     const restored=await page.evaluate(async()=>{const d=(await V2Local.pending())[0];return {id:d.operationId,body:JSON.stringify(d.request)};});assert.deepEqual(restored,saved);
-    await page.locator('#v2ForgetLocal').click();await page.locator('#v2Dialog[open]').getByText(/cannot be cleared/).waitFor();
+    await clickRecovery(page,'v2ForgetLocal');await page.locator('#v2Dialog[open]').getByText(/cannot be cleared/).waitFor();
     const downloadPromise=page.waitForEvent('download');await page.locator('#v2ExportLocal').click();const download=await downloadPromise;
     const recovery=fs.readFileSync(await download.path(),'utf8');assert.ok(recovery.includes(saved.id));assert.equal(recovery.includes(f.h.group),false);assert.equal(recovery.includes(f.h.properties.V2_ADMIN_SECRET),false);
     await page.locator('#v2Close').click();await waitPending(page,1);
     await page.locator('#v2Hole').selectOption('0');await page.getByRole('button',{name:'Save this hole',exact:true}).click();
     await browserWait(page,async()=>{const d=(await V2Local.pending())[0];return d?.attempts>=2;});
-    f.release();await waitPending(page,0);await page.locator('#scoreMessage').filter({hasText:'Saved to server.'}).waitFor();
+    f.release();await waitPending(page,0);await page.locator('#v2ScoreStatus').filter({hasText:'All scores synced.'}).waitFor();
     assert.equal(f.requests.filter(r=>r.action==='saveHoleScores').length,2);assert.ok(f.requests.filter(r=>r.action==='saveHoleScores').every(r=>r.operationId===saved.id));
     const history=f.h.ctx.v2Rows('ScoreHistory').map(r=>JSON.parse(r.data)).filter(c=>c.after.hole===1);assert.equal(history.length,4,'lost response/retry must not create duplicate history');
     await page.locator('#v2Hole').selectOption('17');await page.waitForFunction(()=>!document.getElementById('nextButton').disabled);
@@ -98,7 +103,7 @@ async function scenario(browser,label) {
       f.offline(false);
       if(trigger==='online')await page.evaluate(()=>window.dispatchEvent(new Event('online')));
       else if(trigger==='resume')await page.evaluate(()=>{Object.defineProperty(document,'visibilityState',{configurable:true,value:'visible'});document.dispatchEvent(new Event('visibilitychange'));});
-      else await page.locator('#v2RetryLocal').tap();
+      else await clickRecovery(page,'v2RetryLocal');
       await waitPending(page,0);
       const writes=f.requests.filter(r=>r.action==='saveHoleScores');
       assert.deepEqual(writes.map(d=>d.hole),[1,2]);
@@ -117,7 +122,7 @@ async function scenario(browser,label) {
     assert.equal(f.h.save({scores:[1,2,3,4].map(i=>({playerId:'p'+i,status:'scored',gross:5,expectedRevision:0}))}).ok,true);
     f.offline(false);await page.evaluate(()=>window.dispatchEvent(new Event('online')));
     await browserWait(page,async()=>(await V2Local.pending())[0]?.failureKind==='conflict');
-    await page.locator('#v2ReviewLocal').tap();await page.locator('[data-review-operation]').tap();
+    await clickRecovery(page,'v2ReviewLocal');await page.locator('[data-review-operation]').tap();
     await page.getByRole('heading',{name:'Review score conflict'}).waitFor();
     assert.equal(await page.locator('.v2-use-local:checked').count(),0,'never preselect an overwrite');
     await page.evaluate(()=>{window.confirm=()=>{throw Error('Recovery must not call native confirm');};});
@@ -129,7 +134,7 @@ async function scenario(browser,label) {
     const pending=await page.evaluate(()=>V2Local.pending()),savedId=pending[0].recoveryIntent.resolutionId;
     assert.equal(f.h.ctx.v2Rows('ScoreHistory').length,5,'server accepted exactly one selected correction before response loss');
     await page.close();await f.context.addInitScript(()=>{const now=Date.now;Date.now=()=>now()+61000;});page=await f.page();await f.openGroup(page);f.offline(false);
-    await page.locator('#v2RetryLocal').tap();await waitPending(page,0);
+    await clickRecovery(page,'v2RetryLocal');await waitPending(page,0);
     const records=await page.evaluate(()=>V2Local.recovery()),resolved=records.drafts.find(d=>d.recoveryIntent?.resolutionId===savedId);
     assert.equal(resolved.status,'resolved');assert.equal(f.h.ctx.v2Rows('ScoreHistory').length,5);
     const resolutions=f.requests.filter(r=>r.action==='resolveOperation');assert.ok(resolutions.length>=2);assert.ok(resolutions.every(r=>r.resolutionId===savedId));
@@ -146,14 +151,14 @@ async function scenario(browser,label) {
     await page.waitForFunction(()=>!document.querySelector('#v2PreparedGroups button'));
     const writes=f.requests.filter(r=>['saveHoleScores','operationStatus'].includes(r.action)).length;
     await page.evaluate(()=>{for(let i=0;i<3;i++){window.dispatchEvent(new Event('online'));document.dispatchEvent(new Event('visibilitychange'));}});
-    await page.locator('#v2ReviewLocal').tap();await page.getByRole('heading',{name:'Local score recovery'}).waitFor();
+    await clickRecovery(page,'v2ReviewLocal');await page.getByRole('heading',{name:'Local score recovery'}).waitFor();
     assert.equal(f.requests.filter(r=>['saveHoleScores','operationStatus'].includes(r.action)).length,writes);
     assert.equal((await page.evaluate(()=>V2Local.pending())).length,1);
     const fresh=f.h.post({action:'issueGroupCredential',credential:f.h.admin,eventId:'v2-event',groupNo:1});
     await page.locator('[data-reauth-group]').tap();await page.locator('#v2Code').fill(fresh.pin);await page.getByRole('button',{name:'Open group',exact:true}).tap();
     await page.locator('#scoreScreen.active').waitFor();
     await browserWait(page,async()=>(await V2Local.pending())[0]?.status==='needs-review');
-    await page.locator('#v2ReviewLocal').tap();await page.locator('[data-review-operation]').tap();
+    await clickRecovery(page,'v2ReviewLocal');await page.locator('[data-review-operation]').tap();
     await page.getByRole('heading',{name:'Review score conflict'}).waitFor();
     for(const checkbox of await page.locator('.v2-use-local').all())await checkbox.check();
     await page.locator('#v2RecoveryReason').fill('Explicit renewed group session');await page.locator('#v2ResubmitLocal').tap();await page.locator('#v2RecoveryConfirmSubmit').tap();await waitPending(page,0);
@@ -169,7 +174,7 @@ async function scenario(browser,label) {
     f.h.save({scores:[1,2,3,4].map(i=>({playerId:'p'+i,status:'scored',gross:5,expectedRevision:0}))});
     f.offline(false);await page.evaluate(()=>window.dispatchEvent(new Event('online')));
     await browserWait(page,async()=>(await V2Local.pending())[0]?.failureKind==='conflict');
-    await page.locator('#v2ReviewLocal').tap();await page.locator('[data-review-operation]').tap();
+    await clickRecovery(page,'v2ReviewLocal');await page.locator('[data-review-operation]').tap();
     await page.getByRole('heading',{name:'Review score conflict'}).waitFor();
     await page.evaluate(()=>{window.confirm=()=>{throw Error('Native confirmation forbidden in recovery');};window.alert=()=>{throw Error('Native alert forbidden in recovery');};});
     await page.locator('.v2-use-local').first().check();await page.locator('#v2RecoveryReason').fill('Reviewed BLOB confirmation');
@@ -218,11 +223,11 @@ async function scenario(browser,label) {
       await V2Local.problem(d.operationId,'Scoring credential invalid or expired');
     },{boot,backend:endpoint});
     await page.reload();await f.openGroup(page);
-    await page.locator('#v2LocalSummary').filter({hasText:'other rounds/backends'}).waitFor();
-    await page.locator('#v2RetryLocal').tap();await page.evaluate(()=>window.dispatchEvent(new Event('online')));
+    await page.locator('#v2LocalSummary').filter({hasText:'other rounds/backends'}).waitFor({state:'attached'});
+    await clickRecovery(page,'v2RetryLocal');await page.evaluate(()=>window.dispatchEvent(new Event('online')));
     await page.locator('#v2Hole').selectOption('17');await browserWait(page,()=>!document.getElementById('nextButton').disabled);
     assert.equal(f.requests.some(r=>r.eventId==='older-round'),false);
-    await page.locator('#v2ReviewLocal').tap();await page.getByRole('heading',{name:'Other rounds and backends'}).waitFor();
+    await clickRecovery(page,'v2ReviewLocal');await page.getByRole('heading',{name:'Other rounds and backends'}).waitFor();
     await page.getByText('Other round/backend · older-round',{exact:false}).waitFor();
     assert.equal((await page.evaluate(()=>V2Local.pending()))[0].attempts,0);assert.deepEqual(f.errors,[]);
     console.log('PASS '+label+': older-round records stay visible and paused without blocking current-round completion');
@@ -262,8 +267,8 @@ async function scenario(browser,label) {
     await fillPickups(page);await page.getByRole('button',{name:'Save this hole',exact:true}).tap();
     await page.locator('#scoreMessage').filter({hasText:/Final results are permanently locked.*no resubmission/}).waitFor();
     const pending=await page.evaluate(()=>V2Local.pending());assert.equal(pending.length,1);assert.equal(pending[0].status,'needs-review');
-    assert.equal(f.h.ctx.getScores('v2-event').length,0);assert.equal(await page.locator('.v2-locked').count(),1);await page.evaluate(()=>renderScoring());assert.equal(await page.locator('.v2-locked').count(),1);await page.locator('#v2LocalSummary').filter({hasText:/permanently locked.*no resubmission/}).waitFor();
-    await page.locator('#v2ReviewLocal').click();await page.locator('#v2ExportLocal').waitFor();
+    assert.equal(f.h.ctx.getScores('v2-event').length,0);assert.equal(await page.locator('.v2-locked').count(),1);await page.evaluate(()=>renderScoring());assert.equal(await page.locator('.v2-locked').count(),1);await page.locator('#v2LocalSummary').filter({hasText:/permanently locked.*no resubmission/}).waitFor({state:'attached'});
+    await clickRecovery(page,'v2ReviewLocal');await page.locator('#v2ExportLocal').waitFor();
     assert.deepEqual(f.errors,[]);console.log('PASS '+label+': post-reveal rejection keeps pending recovery data and disables scoring');
   }finally{await f.context.close();}
 }

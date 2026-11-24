@@ -50,7 +50,7 @@ async function scenario(browser,name,viewport){
   });
   page.on('dialog',d=>d.accept());
   await page.goto('http://flaghunters.test/');
-  await page.getByRole('button',{name:/Enter Scores/}).click();
+  await page.getByRole('button',{name:/^Play/}).click();
   await page.locator('.group-button').first().click();
   await page.locator('#v2Code').fill(h.groupPin==='00'?'01':'00');await page.getByRole('button',{name:'Open group',exact:true}).click();
   await page.locator('#v2AccessError').filter({hasText:/PIN/}).waitFor();
@@ -61,17 +61,17 @@ async function scenario(browser,name,viewport){
   for(const button of await page.locator('.v2-pickup').all())await button.tap();
   assert.equal(await page.locator('.v2-pickup[aria-pressed=true]').count(),4);
   const bbox=await page.locator('.v2-pickup').first().boundingBox();assert.ok(bbox.height>=44);
-  await page.getByRole('button',{name:'Save this hole',exact:true}).tap();await page.locator('#scoreMessage').filter({hasText:'Saved to server.'}).waitFor();
+  await page.getByRole('button',{name:'Save this hole',exact:true}).tap();await page.locator('#v2ScoreStatus').filter({hasText:'All scores synced.'}).waitFor();
   // Same group and reload both retain the session without a second PIN prompt.
   const beforeReload=pinLogins;
   await page.reload();
-  await page.getByRole('button',{name:/Enter Scores/}).click();
+  await page.getByRole('button',{name:/^Play/}).click();
   await page.locator('.group-button').first().click();
   await page.locator('#scoreScreen.active').waitFor();
   assert.equal(await page.locator('#v2Code').count(),0);
   assert.equal(pinLogins,beforeReload);
   await page.evaluate(()=>showScreen('homeScreen'));
-  await page.getByRole('button',{name:/Enter Scores/}).click();
+  await page.getByRole('button',{name:/^Play/}).click();
   await page.locator('.group-button').first().click();
   await page.locator('#scoreScreen.active').waitFor();
   assert.equal(pinLogins,beforeReload);
@@ -83,31 +83,32 @@ async function scenario(browser,name,viewport){
   await page.locator('#score-p1 .quick-score').first().tap();await page.getByRole('button',{name:'Save this hole',exact:true}).tap();
   await page.locator('#scoreMessage').filter({hasText:/correction reason/}).waitFor();assert.equal(h.ctx.getScores('v2-event')[0].revision,1);
   await page.getByRole('textbox',{name:'Correction reason for Player 1',exact:true}).fill('Corrected pickup entry');
-  await page.getByRole('button',{name:'Save this hole',exact:true}).tap();await page.locator('#scoreMessage').filter({hasText:'Saved to server.'}).waitFor();
+  await page.getByRole('button',{name:'Save this hole',exact:true}).tap();await page.locator('#v2ScoreStatus').filter({hasText:'All scores synced.'}).waitFor();
   assert.equal(h.ctx.getScores('v2-event').find(s=>s.player_id==='p1').revision,2);
   await page.locator('#score-p1').getByRole('button',{name:'Revision history'}).tap();await page.locator('#v2Dialog').getByText('Corrected pickup entry',{exact:true}).waitFor();assert.ok((await page.locator('#v2Dialog').innerText()).includes('scorer'));await page.locator('#v2Close').click();
   // Simulate other holes already accepted, then finish and edit using the real interface.
   for(let hole=2;hole<=17;hole++)assert.equal(h.save({hole,scores:[1,2,3,4].map(i=>({playerId:'p'+i,status:'pickup',gross:null,expectedRevision:0}))}).ok,true);
   // The fixture wrote those holes outside this tab; refresh the accepted local snapshot.
+  await page.locator('#v2ScoreRecovery summary').tap();
   await page.getByRole('button',{name:'Reload scores',exact:true}).tap();
   await page.locator('#v2Hole').selectOption('17');
   for(const button of await page.locator('.v2-pickup').all())await button.tap();
   await page.getByRole('button',{name:'Save this hole',exact:true}).tap();
-  await page.locator('#scoreMessage').filter({hasText:'Saved to server.'}).waitFor();
+  await page.locator('#v2ScoreStatus').filter({hasText:'All scores synced.'}).waitFor();
   await page.getByRole('button',{name:'Finish Group',exact:true}).tap();await page.locator('#completeScreen.active').waitFor();
   assert.equal(h.ctx.getGroupStatus('v2-event').length,1);
   await page.getByRole('button',{name:'Edit Scores',exact:true}).tap();await page.locator('#scoreScreen.active').waitFor();
   await page.locator('#score-p1 .quick-score').first().tap();await page.getByRole('textbox',{name:'Correction reason for Player 1',exact:true}).fill('Correction after Finish Group');
-  await page.getByRole('button',{name:'Save this hole',exact:true}).tap();await page.locator('#scoreMessage').filter({hasText:'Saved to server.'}).waitFor();
+  await page.getByRole('button',{name:'Save this hole',exact:true}).tap();await page.locator('#v2ScoreStatus').filter({hasText:'All scores synced.'}).waitFor();
   assert.equal(h.ctx.getScores('v2-event').find(s=>s.player_id==='p1'&&s.hole===18).revision,2);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false,'horizontal overflow');
-  await page.evaluate(()=>showScreen('homeScreen'));await page.getByRole('button',{name:/Admin Setup/}).click();
+  await page.evaluate(()=>showScreen('homeScreen'));await page.getByRole('button',{name:/^Admin$/}).click();
   await page.locator('#adminPin').fill(h.properties.V2_ADMIN_SECRET);await page.getByRole('button',{name:'Login',exact:true}).click();await page.locator('#adminScreen.active').waitFor();
   await page.locator('#v2IssueGroup').fill('2');await page.locator('#v2Issue').tap();await page.waitForFunction(()=>/^[0-9]{2}$/.test(document.getElementById('v2Issued').textContent));
   assert.equal(h.post({action:'openGroup',pin:await page.locator('#v2Issued').innerText(),eventId:'v2-event',groupNo:2}).ok,true);
   // Read existing competition renderers using synthetic saved configuration and varied scores.
   h.ctx.saveCompetitionRecord('v2-event',{row:null,enabled:true,holes:[3],pins:{3:'p1'},pairs:[['p1','p2'],['p3','p4'],['p5','p6'],['p7','p8']],blindEnabled:true,team234Enabled:true});
-  await page.evaluate(()=>showScreen('homeScreen'));await page.getByRole('button',{name:/Saturday Competitions/}).click();
+  await page.evaluate(()=>showScreen('homeScreen'));await page.getByRole('button',{name:/^Results/}).click();await page.getByRole('button',{name:'Competition results',exact:true}).click();
   await page.locator('#competitionContent').getByText('Nearest the Pin',{exact:false}).first().waitFor();
   assert.ok((await page.locator('#competitionContent').innerText()).includes('Blind Pairs'));assert.ok((await page.locator('#competitionContent').innerText()).includes('2/3/4 Team Game'));
   const expected=h.ctx.getScores('v2-event').filter(s=>s.player_id==='p1'&&s.hole<=15).reduce((sum,s)=>sum+s.stableford,0);
@@ -115,7 +116,7 @@ async function scenario(browser,name,viewport){
   // Group 1's cached session must never silently open Group 2.
   await page.evaluate(()=>showScreen('adminScreen'));
   await page.locator('#v2AdminLogout').click();
-  await page.getByRole('button',{name:/Enter Scores/}).click();
+  await page.getByRole('button',{name:/^Play/}).click();
   await page.locator('.group-button').nth(1).click();
   await page.locator('#v2Code').waitFor();
   await page.locator('#v2Close').click();
@@ -129,7 +130,7 @@ async function scenario(browser,name,viewport){
   // Public leaderboard uses partial splits and keeps long names on one line.
   h.sheets.get('Players').rows[1][1]='A Very Long Test Player Name For Narrow Screens';
   await page.evaluate(()=>showScreen('homeScreen'));
-  await page.getByRole('button',{name:/Live Leaderboard/}).click();
+  await page.getByRole('button',{name:/^Results/}).click();
   await page.locator('#leaderboardTable').getByText(/B9 is partial through hole 15/).waitFor();
   assert.equal(await page.locator('#leaderboardTable .v2-table-name').first().evaluate(el=>getComputedStyle(el).whiteSpace),'nowrap');
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
@@ -165,7 +166,7 @@ async function scenario(browser,name,viewport){
     assert.equal(h.post({action:'completeGroup',credential:h.admin,eventId:'v2-event',groupNo}).ok,true);
   }
   await page.evaluate(()=>showScreen('homeScreen'));
-  await page.getByRole('button',{name:/Admin Setup/}).click();
+  await page.getByRole('button',{name:/^Admin$/}).click();
   await page.locator('#adminPin').fill(h.properties.V2_ADMIN_SECRET);
   await page.getByRole('button',{name:'Login',exact:true}).click();
   await page.locator('#adminScreen.active').waitFor();

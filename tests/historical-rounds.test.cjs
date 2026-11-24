@@ -55,7 +55,8 @@ test('imported scores, summaries and competition outcomes stay visible without a
   const card = get('scorecard', { playerId: 'p1' }).scorecard;
   assert.equal(card.holes.length, 18);
   assert.equal(card.holes.at(-1).gross, 8);
-  assert.deepEqual(get('season').season.map(p => [p.appearances, p.stableford_total, p.blobs]),
+  assert.equal(card.holes.at(-1).net, 7);
+  assert.deepEqual(get('season', { year: '2025' }).season.map(p => [p.appearances, p.stableford_total, p.blobs]),
     [[1, 34, 1]]);
   const comps = get('competitions');
   assert.deepEqual(comps.nearest_pins, { 3: 'p1' });

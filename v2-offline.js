@@ -43,28 +43,58 @@
   }
   root.V2OfflineAssets={create};
   if(!root.document)return;
-  const panel=document.createElement('section');panel.className='v2-local-status';
-  panel.innerHTML='<strong>Offline app</strong><p id="v2OfflineStatus" role="status"></p><button id="v2PrepareOffline">Prepare offline app</button><div id="v2PreparedGroups"></div>';
-  document.body.prepend(panel);
-  const button=document.getElementById('v2PrepareOffline'),output=document.getElementById('v2OfflineStatus');
+  const panel=document.createElement('div');
+  panel.innerHTML='<p id="v2OfflineStatus" role="status"></p><button type="button" id="v2PrepareOffline">Check offline access</button>';
+  const button=panel.querySelector('#v2PrepareOffline'),output=panel.querySelector('#v2OfflineStatus');
+  const prepared=document.createElement('div');
+  prepared.id='v2PreparedGroups';
+  prepared.hidden=true;
+  document.getElementById('homeScreen').insertBefore(prepared,document.getElementById('homeMessage'));
+  root.V2OfflineAssets.panel=panel;
   const assets=navigator.serviceWorker&&root.caches?create({base:new URL('./',location.href),serviceWorker:navigator.serviceWorker,caches:root.caches}):null;
-  let readiness='Checking cached app assets…',action='',busy=false,sequence=0;
-  function status(){output.textContent=(navigator.onLine?'Connection available; server data may still be stale. ':'Offline. Previously opened group data may be stale. Scores saved here await server acceptance. ')+readiness+' '+action+' Group access must be prepared separately. Safari may evict site storage. Keep recovery exports; if prepared data is missing, reconnect and reopen the group. Never clear site data with pending scores.';}
-  function describe(state){return state.waiting?'Update ready. Close all app tabs, then reopen to use it. Pending scores are retained.':state.installing?'An app update is installing; keep this tab open.':state.cacheComplete?'Cached app assets verified on this device.':'No complete app asset cache found. Connect and prepare before relying on offline loading.';}
-  async function refresh(){status();if(busy)return;const turn=++sequence;try{const state=await assets?.inspect();if(turn===sequence&&!busy)readiness=state?describe(state):'Offline loading is unavailable in this browser.';}catch(_){if(turn===sequence&&!busy)readiness='Cached app assets could not be verified. Saved scores were not changed.';}status();}
-  window.addEventListener('online',refresh);window.addEventListener('offline',refresh);window.addEventListener('pageshow',refresh);
-  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')void refresh();});
-  button.onclick=async()=>{
-    button.disabled=true;busy=true;sequence++;action='';readiness=navigator.onLine?'Checking app preparation and updates… Keep this tab open.':'Checking existing cached assets only…';status();
+  let busy=false,state=null,sequence=0;
+  function ready(){return !!(state?.workerReady&&state.cacheComplete&&!state.waiting&&!state.installing);}
+  function status(message){
+    output.textContent=message;
+    window.dispatchEvent(new Event('v2OfflineReadiness'));
+  }
+  function describe(){
+    if(!assets)return 'Offline play is unavailable in this browser.';
+    if(state?.waiting)return 'Update ready. Close all app tabs, then reopen. Saved scores will be kept.';
+    if(state?.installing)return 'Preparing offline access…';
+    if(ready())return 'Offline app is ready. Open and confirm your group before going offline.';
+    return 'Connect to prepare offline access.';
+  }
+  async function refresh(auto=false){
+    if(busy)return;
+    const turn=++sequence;
+    try{
+      const inspected=await assets?.inspect();
+      if(turn!==sequence||busy)return;
+      state=inspected;
+      status(describe());
+      if(auto&&navigator.onLine&&assets&&!ready()&&!state?.waiting)await prepare();
+    }catch(_){if(turn===sequence){state=null;status('Offline access could not be checked.');}}
+  }
+  async function prepare(manual=false){
+    if(busy)return;
+    button.disabled=true;busy=true;sequence++;
+    status(navigator.onLine?'Preparing offline access…':'Checking offline access…');
     try {
       if(!isSecureContext||!assets)throw Error('Offline loading is unavailable in this browser.');
-      const result=await assets.prepare();readiness=describe(result.state);
-      if(result.offline)action='No new preparation or update check was performed while offline. Reconnect to check for updates.';
-      else {action='App assets prepared and verified. Online preparation/update check completed.';try{await navigator.storage?.persist?.();}catch(_){action+=' Persistent storage was not granted; keep recovery exports.';}}
+      const result=await assets.prepare();state=result.state;
+      status(result.offline?'Reconnect to prepare or update offline access.':describe());
+      if(manual&&!result.offline)try{await navigator.storage?.persist?.();}catch(_){}
     }catch(error){
-      try{readiness=describe(await assets.inspect());}catch(_){readiness='Cached app readiness is unknown.';}
-      action=error.name==='TypeError'?'Preparation/update check failed. Existing cached assets and saved scores are retained. Reconnect and try again.':error.message;
-    }finally{busy=false;button.disabled=false;status();}
-  };
-  void refresh();
+      try{state=await assets?.inspect();}catch(_){state=null;}
+      status((error.name==='TypeError'?'Offline check failed. Try again when connected.':error.message));
+    }finally{busy=false;button.disabled=false;}
+  }
+  Object.assign(root.V2OfflineAssets,{ready,refresh});
+  window.addEventListener('online',()=>refresh(true));
+  window.addEventListener('offline',()=>refresh());
+  window.addEventListener('pageshow',()=>refresh(true));
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')void refresh();});
+  window.navigator.serviceWorker?.addEventListener('controllerchange',()=>refresh());
+  button.onclick=()=>prepare(true);
 })(globalThis);

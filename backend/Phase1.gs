@@ -397,14 +397,26 @@ function v2ResolveOperation(data,actor) {
 function doGet(e) {
   try {
     const p=(e&&e.parameter)||{},action=p.action||'status',eventId=String(p.eventId||'');
-    if(action==='status') return jsonResponse({ok:true,app:'The Real Flag Hunters',version:'2-stage7',api_generation:'v2-phase1',scoring_access_mode:v2ScoringPolicy().mode,scoring_access_revision:v2ScoringPolicy().revision,message:'V2 test backend'});
+    if(action==='status') {
+      const policy=v2ScoringPolicy();
+      const environment=v2Props().getProperty('V2_TEST_ONLY')==='true'?'test':'live';
+      return jsonResponse({ok:true,app:'The Real Flag Hunters',version:'2-stage47c',api_generation:'v2-phase1',
+        scoring_access_mode:policy.mode,scoring_access_revision:policy.revision,message:'V2 '+environment+' backend'});
+    }
     if(action==='scorecard') return jsonResponse({ok:true,scorecard:v2Scorecard(eventId,String(p.playerId||''))});
     if(action==='scores') return jsonResponse({ok:true,scores:v2PublicScores(eventId)});
     if(action==='leaderboard') return jsonResponse({ok:true,leaderboard:getLeaderboard(eventId),revealed:v2ResultsRevealed(eventId)});
     if(action==='competitions') return jsonResponse({ok:true,...v2PublicCompetitions(eventId)});
     if(action==='roundCourse') {const meta=v2Meta(eventId);return jsonResponse({ok:true,course:meta?v2Course(meta):getCourse()});}
+    if(action==='rounds') return jsonResponse({ok:true,...v2RoundResultsIndex()});
+    if(action==='season'||action==='eclectics') {
+      const {year,years,events}=v2SeasonRounds(p.year);
+      return jsonResponse(action==='season'
+        ? {ok:true,year,years,season:getSeasonStats(events)}
+        : {ok:true,year,eclectics:v2Eclectics(events)});
+    }
     // Explicit allowlist: no future legacy endpoint can bypass the reveal policy.
-    if(!['currentEvent','groups','players','course','season'].includes(action)) throw new Error('Unknown action');
+    if(!['currentEvent','groups','players','course'].includes(action)) throw new Error('Unknown action');
     return legacyDoGet(e);
   } catch(err) {return jsonResponse({ok:false,error:err.message});}
 }
@@ -526,9 +538,82 @@ function v2CreateEvent(data) {
   sheetNamed('Events').getRange(i+1,5).setValue('active');
   return {ok:true,event_id:eventId,schema_version:2};
 }
+function v2RoundDate(value) {
+  if(value instanceof Date) return Utilities.formatDate(value,Session.getScriptTimeZone(),'yyyy-MM-dd');
+  return /^\d{4}-\d{2}-\d{2}/.exec(String(value))?.[0]||'';
+}
+function v2CompletedResults() {
+  // The production Events sheet contains official rounds. Synthetic fixtures use a separate workbook.
+  return getRowsAsObjects(sheetNamed('Events')).filter(event=>
+    String(event.status).toLowerCase()==='complete'&&v2ResultsRevealed(String(event.event_id)));
+}
+function v2RoundResultsIndex() {
+  const completed=v2CompletedResults().sort((a,b)=>
+    v2RoundDate(b.date).localeCompare(v2RoundDate(a.date))||String(b.event_id).localeCompare(String(a.event_id)));
+  const current=getCurrentEvent();
+  const status=String(current?.status).toLowerCase();
+  const inPlay=status==='active'||status==='complete'&&!v2ResultsRevealed(String(current.event_id));
+  const rounds=[...(inPlay?[current]:[]),...completed].map(event=>({
+    event_id:String(event.event_id),date:v2RoundDate(event.date),course:event.course,tee:event.tee,
+    status:event.status,revealed:v2ResultsRevealed(String(event.event_id))
+  }));
+  return {rounds,current_event_id:rounds[0]?.event_id||null};
+}
+function v2SeasonRounds(value) {
+  const year=String(value||Utilities.formatDate(new Date(),Session.getScriptTimeZone(),'yyyy-MM-dd').slice(0,4));
+  if(!/^\d{4}$/.test(year)) throw Error('Choose a four-digit season year');
+  const completed=v2CompletedResults();
+  const years=[...new Set(completed.map(event=>v2RoundDate(event.date).slice(0,4)).filter(Boolean))].sort().reverse();
+  return {year,years,events:completed.filter(event=>v2RoundDate(event.date).slice(0,4)===year)};
+}
+function v2RecordedNumber(value) {
+  if(typeof value!=='number'&&(typeof value!=='string'||!value.trim())) return null;
+  const number=Number(value);
+  return Number.isFinite(number)?number:null;
+}
 function v2EclecticCandidates(eventId) {
-  // Eclectic presentation is a later phase. Never manufacture a candidate for a pickup.
-  return getScores(eventId).filter(s=>s.score_status!=='pickup'&&s.gross!==null&&Number.isFinite(Number(s.gross)));
+  return getScores(eventId).filter(score=>
+    score.score_status!=='pickup'&&!isTrue(score.blob)&&v2RecordedNumber(score.gross)>0);
+}
+function v2Eclectics(events) {
+  const names=new Map(getPlayers().map(player=>[String(player.player_id),player.name]));
+  const tees=new Map();
+  for(const event of events) {
+    if(!event.course||!event.tee) continue;
+    const key=JSON.stringify([event.course,event.tee]);
+    if(!tees.has(key)) tees.set(key,{course:event.course,tee:event.tee,players:new Map()});
+    const {players}=tees.get(key);
+    const eventId=String(event.event_id);
+    for(const player of getGroups(eventId)) {
+      const id=String(player.player_id);
+      if(!players.has(id)) players.set(id,{player_id:id,name:names.get(id)||player.player_name||id,
+        gross:Array(18).fill(null),net:Array(18).fill(null)});
+    }
+    for(const score of v2EclecticCandidates(eventId)) {
+      const player=players.get(String(score.player_id)),hole=Number(score.hole);
+      if(!player||!Number.isInteger(hole)||hole<1||hole>18) continue;
+      for(const measure of ['gross','net']) {
+        const recorded=v2RecordedNumber(score[measure]),previous=player[measure][hole-1];
+        if(recorded!==null&&(previous===null||recorded<previous)) player[measure][hole-1]=recorded;
+      }
+    }
+  }
+  function nine(player,measure,start) {
+    const holes=player[measure].slice(start,start+9),recorded=holes.filter(score=>score!==null);
+    return {player_id:player.player_id,name:player.name,holes,holes_recorded:recorded.length,
+      complete:recorded.length===9,total:recorded.length===9?recorded.reduce((sum,score)=>sum+score,0):null};
+  }
+  function standings(players,measure,start) {
+    return players.map(player=>nine(player,measure,start)).sort((a,b)=>
+      Number(b.complete)-Number(a.complete)||(a.total??0)-(b.total??0)||
+      b.holes_recorded-a.holes_recorded||a.name.localeCompare(b.name)||a.player_id.localeCompare(b.player_id));
+  }
+  return [...tees.values()].sort((a,b)=>a.course.localeCompare(b.course)||a.tee.localeCompare(b.tee))
+    .map(({course,tee,players})=>{
+      const roster=[...players.values()];
+      return {course,tee,gross:{front:standings(roster,'gross',0),back:standings(roster,'gross',9)},
+        net:{front:standings(roster,'net',0),back:standings(roster,'net',9)}};
+    });
 }
 function v2Rules(meta,player) {
   if(meta.calculation_version!=='stableford-v1'||meta.allowance!==1||meta.rounding!=='nearest-ties-away-from-zero' ||
@@ -577,7 +662,8 @@ function v2Leaderboard(eventId) {
     const pickup=total.gross_incomplete;
     return {player_id:p.player_id,name:p.player_name,playing_handicap:p.playing_handicap,
       front9,back9,total,revealed,gross:total.gross,gross_incomplete:pickup,
-      net:pickup?null:rows.reduce((n,s)=>n+Number(s.net||0),0),net_incomplete:pickup,
+        net:pickup||!rows.length||rows.some(s=>v2RecordedNumber(s.net)===null)
+          ? null : rows.reduce((n,s)=>n+v2RecordedNumber(s.net),0),net_incomplete:pickup,
       stableford:total.stableford,holes:total.holes,
       blobs:rows.filter(s=>isTrue(s.blob)).length,birdies:rows.filter(s=>isTrue(s.birdie)).length,eagles:rows.filter(s=>isTrue(s.eagle)).length};
   }).sort((a,b)=>b.stableford-a.stableford||String(a.player_id).localeCompare(String(b.player_id)));
@@ -616,11 +702,13 @@ function v2Scorecard(eventId,playerId) {
     const hole=i+1,c=course.find(h=>Number(h.hole)===hole),score=scores.find(s=>Number(s.hole)===hole);
     return {hole,par:c?Number(c.par):null,stroke_index:c?Number(c.stroke_index):null,
       status:score?(score.score_status==='pickup'?'pickup':'scored'):'unplayed',
-      gross:score&&score.score_status!=='pickup'?Number(score.gross):null,
+      gross:score&&score.score_status!=='pickup'?v2RecordedNumber(score.gross):null,
+      net:score&&score.score_status!=='pickup'?v2RecordedNumber(score.net):null,
       stableford:score?Number(score.stableford):null};
   });
   return {player_id:player.player_id,name:player.name,playing_handicap:player.playing_handicap,
     revealed:player.revealed,front9:player.front9,back9:player.back9,total:player.total,holes,
+    net:player.net,blobs:player.blobs,birdies:player.birdies,eagles:player.eagles,
     hidden_holes:player.revealed?[]:[16,17,18]};
 }
 

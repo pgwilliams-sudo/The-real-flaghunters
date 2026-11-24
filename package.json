@@ -12,6 +12,7 @@
     "test:local-drafts": "node tests/local-drafts.browser.cjs",
     "test:offline-feasibility": "node tests/offline-feasibility.browser.cjs",
     "package:backend": "node scripts/package-backend.cjs",
-    "test:stage7": "node tests/stage7.browser.cjs"
+    "test:stage7": "node tests/stage7.browser.cjs",
+    "test:stage47c": "node tests/stage47c.browser.cjs"
   }
 }

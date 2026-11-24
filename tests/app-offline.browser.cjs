@@ -3,7 +3,7 @@ const http=require('node:http'),fs=require('node:fs'),assert=require('node:asser
 const {chromium,webkit}=require('playwright'),{harness}=require('./harness.cjs');
 async function run(browser,label){
   const h=harness(),events=h.sheets.get('Events').rows;events.push(events.splice(1,1)[0]);
-  let version=1,deny=false,denyUpdateScript=false,workerReads=0,holdWrites=true,stallBody=false;const stalled=[];const calls=[];
+  let version=1,deny=true,denyUpdateScript=false,workerReads=0,holdWrites=true,stallBody=false;const stalled=[];const calls=[];
   const server=http.createServer((req,res)=>{
     const file=req.url==='/offline-readiness/'?'dev/offline-readiness/index.html':req.url==='/offline-readiness/check.js'?'dev/offline-readiness/check.js':req.url==='/'?'index.html':req.url==='/offline-probe-sw.js'?'dev/offline-feasibility/offline-probe-sw.js':req.url==='/offline-feasibility/'?'dev/offline-feasibility/index.html':req.url==='/offline-feasibility/probe.js'?'dev/offline-feasibility/probe.js':req.url.slice(1);
     if(!['index.html','v2-app-sw.js','v2-offline.js','v2.js','v2-local.js','v2-sync.js','v2-recovery.js','v2.css','app-icon.PNG','dev/offline-feasibility/offline-probe-sw.js','dev/offline-feasibility/index.html','dev/offline-feasibility/probe.js','dev/offline-readiness/index.html','dev/offline-readiness/check.js'].includes(file)){res.writeHead(404);return res.end();}
@@ -28,33 +28,33 @@ async function run(browser,label){
   });
   async function page(){const p=await context.newPage();p.on('pageerror',e=>errors.push(e.message));p.on('dialog',d=>d.accept());await p.goto(origin);return p;}
   try{
-    let p=await page();await p.evaluate(async()=>{const r=await navigator.serviceWorker.register('/offline-probe-sw.js',{scope:'/offline-feasibility/'});if(!r.active)await new Promise(resolve=>{const w=r.installing;w.addEventListener('statechange',()=>{if(w.state==='activated')resolve();});});});await p.getByRole('button',{name:/Enter Scores/}).click();await p.locator('.group-button').first().click();
+    let p=await page();await p.evaluate(async()=>{const r=await navigator.serviceWorker.register('/offline-probe-sw.js',{scope:'/offline-feasibility/'});if(!r.active)await new Promise(resolve=>{const w=r.installing;w.addEventListener('statechange',()=>{if(w.state==='activated')resolve();});});});await p.getByRole('button',{name:/^Play/}).click();await p.locator('.group-button').first().click();
     await p.locator('#v2Code').fill(h.groupPin);await p.getByRole('button',{name:'Open group',exact:true}).click();await p.locator('#scoreScreen.active').waitFor();
     // Auth-page/asset denial must not produce a partially published shell cache.
-    deny=true;await p.locator('#v2PrepareOffline').click();await p.locator('#v2OfflineStatus').filter({hasText:/could not be installed/}).waitFor();
+    await p.locator('#v2OfflineStatus').filter({hasText:/could not be installed/}).waitFor({state:'attached'});
     assert.deepEqual(await p.evaluate(async()=>(await caches.keys()).filter(n=>n.startsWith('flaghunters-app:'))),[]);deny=false;
-    await p.locator('#v2PrepareOffline').click();await p.locator('#v2OfflineStatus').filter({hasText:/App assets prepared/}).waitFor({timeout:40000}).catch(async e=>{console.log('PREPARE:',await p.locator('#v2OfflineStatus').innerText(),await p.evaluate(async()=>(await navigator.serviceWorker.getRegistrations()).map(r=>({active:r.active?.state,waiting:r.waiting?.state,installing:r.installing?.state}))));throw e;});await p.reload();
+    await p.evaluate(()=>window.dispatchEvent(new Event('online')));await p.locator('#v2ScoreReadiness').filter({hasText:'Ready to play offline'}).waitFor({timeout:40000}).catch(async e=>{console.log('PREPARE:',await p.locator('#v2OfflineStatus').innerText(),await p.evaluate(async()=>(await navigator.serviceWorker.getRegistrations()).map(r=>({active:r.active?.state,waiting:r.waiting?.state,installing:r.installing?.state}))));throw e;});await p.reload();
     await p.waitForFunction(()=>!!navigator.serviceWorker.controller);
     await context.setOffline(true);
     // Close/reopen rather than same-document hash navigation, then force reload.
     for(const suffix of ['', '#']){
       const reopened=await context.newPage();await reopened.goto(origin+suffix);
-      await reopened.locator('#v2OfflineStatus').filter({hasText:/Cached app assets verified/}).waitFor();
+      await reopened.locator('#v2OfflineStatus').filter({hasText:/Offline app is ready/}).waitFor({state:'attached'});
       await reopened.reload();
-      await reopened.locator('#v2OfflineStatus').filter({hasText:/Cached app assets verified/}).waitFor();
+      await reopened.locator('#v2OfflineStatus').filter({hasText:/Offline app is ready/}).waitFor({state:'attached'});
       assert.equal(new URL(reopened.url()).pathname,'/');await reopened.close();
     }
     console.log('PASS '+label+': offline new-tab reopening and reload at / and /#');
     await p.reload();
-    await p.locator('#homeMessage').filter({hasText:/Offline.*Reopen prepared round/}).waitFor();
-    await p.locator('#v2OfflineStatus').filter({hasText:/Cached app assets verified/}).waitFor();
-    await p.getByRole('button',{name:/Reopen prepared round/}).click();await p.locator('#scoreScreen.active').waitFor();
+    await p.locator('#homeMessage').filter({hasText:/offline.*resume a group/}).waitFor();
+    await p.locator('#v2OfflineStatus').filter({hasText:/Offline app is ready/}).waitFor({state:'attached'});
+    await p.getByRole('button',{name:/^Resume Group/}).click();await p.locator('#scoreScreen.active').waitFor();
     for(const b of await p.locator('.v2-pickup').all())await b.click();await p.getByRole('button',{name:'Save this hole',exact:true}).click();
     await observe(p,async()=>(await V2Local.pending()).length===1);
     const before=await p.evaluate(()=>V2Local.pending());assert.equal(before[0].attempts,0);assert.equal(calls.filter(c=>c.action==='saveHoleScores').length,0);
-    const offlineWorkerReads=workerReads;await p.locator('#v2PrepareOffline').click();await p.locator('#v2OfflineStatus').filter({hasText:/No new preparation or update check was performed while offline/}).waitFor();assert.equal(workerReads,offlineWorkerReads);assert.deepEqual(await p.evaluate(()=>V2Local.pending()),before);
-    await p.close();p=await page();await p.getByRole('button',{name:/Reopen prepared round/}).click();await p.locator('#scoreScreen.active').waitFor();
-    assert.deepEqual(await p.evaluate(()=>V2Local.pending()),before);assert.match(await p.locator('#v2OfflineStatus').innerText(),/Offline.*stale/);
+    const offlineWorkerReads=workerReads;await clickRecovery(p,'v2PrepareOffline');await p.locator('#v2OfflineStatus').filter({hasText:/Reconnect to prepare or update offline access/}).waitFor();assert.equal(workerReads,offlineWorkerReads);assert.deepEqual(await p.evaluate(()=>V2Local.pending()),before);
+    await p.close();p=await page();await p.getByRole('button',{name:/^Resume Group/}).click();await p.locator('#scoreScreen.active').waitFor();
+    assert.deepEqual(await p.evaluate(()=>V2Local.pending()),before);assert.match(await p.locator('#v2ScoreReadiness').innerText(),/Ready to play offline/);
     await p.evaluate(()=>{window.dispatchEvent(new PageTransitionEvent('pageshow',{persisted:true}));document.dispatchEvent(new Event('visibilitychange'));});
     assert.equal((await p.evaluate(()=>V2Local.pending()))[0].operationId,before[0].operationId);
     const keys=await p.evaluate(async()=>{const names=(await caches.keys()).filter(n=>n.startsWith('flaghunters-app:'));return Promise.all(names.map(async n=>({name:n,urls:(await(await caches.open(n)).keys()).map(r=>r.url)})));});
@@ -62,10 +62,10 @@ async function run(browser,label){
     assert.equal(await p.evaluate(async()=>{const requests=await(await caches.open((await caches.keys()).find(n=>n.startsWith('flaghunters-app:')))).keys();return requests.some(r=>/script.google|offline-feasibility|admin/.test(r.url));}),false);
     // An update waits while a scoring tab is alive and never alters the outbox.
     await context.setOffline(false);denyUpdateScript=true;
-    await p.locator('#v2PrepareOffline').click();await p.locator('#v2OfflineStatus').filter({hasText:/Preparation\/update check failed/}).waitFor();
+    await clickRecovery(p,'v2PrepareOffline');await p.locator('#v2OfflineStatus').filter({hasText:/Offline check failed/}).waitFor();
     assert.equal((await p.evaluate(()=>V2Local.pending()))[0].operationId,before[0].operationId);
     denyUpdateScript=false;version=2;stallBody=true;
-    await p.locator('#v2PrepareOffline').click();
+    await clickRecovery(p,'v2PrepareOffline');
     await p.locator('#v2OfflineStatus').filter({hasText:/could not be installed/}).waitFor({timeout:40000});
     assert.deepEqual(await p.evaluate(async()=>(await caches.keys()).filter(n=>n.startsWith('flaghunters-app:'))),['flaghunters-app:/:stage5-test-v1']);
     const afterStall=await p.evaluate(()=>V2Local.pending());
@@ -74,20 +74,20 @@ async function run(browser,label){
     stallBody=false;for(const response of stalled)response.end(' */');
     console.log('PASS '+label+': stalled update body reaches worker deadline, preserves old cache and pending score payloads');
     deny=true;
-    await p.locator('#v2PrepareOffline').click();await p.locator('#v2OfflineStatus').filter({hasText:/could not be installed/}).waitFor();
+    await clickRecovery(p,'v2PrepareOffline');await p.locator('#v2OfflineStatus').filter({hasText:/could not be installed/}).waitFor({state:'attached'});
     assert.deepEqual(await p.evaluate(async()=>(await caches.keys()).filter(n=>n.startsWith('flaghunters-app:'))),['flaghunters-app:/:stage5-test-v1']);
     assert.equal((await p.evaluate(()=>V2Local.pending()))[0].operationId,before[0].operationId);deny=false;
-    await p.locator('#v2PrepareOffline').click();await p.locator('#v2OfflineStatus').filter({hasText:/Update ready/}).waitFor();
+    await clickRecovery(p,'v2PrepareOffline');await p.locator('#v2OfflineStatus').filter({hasText:/Update ready/}).waitFor();
     await observe(p,async()=>!!(await navigator.serviceWorker.getRegistration()).waiting);
     assert.equal((await p.evaluate(()=>V2Local.pending()))[0].operationId,before[0].operationId);
     await p.close();p=await page();await p.waitForFunction(()=>navigator.serviceWorker.controller?.state==='activated');
     // Reopen after update while offline, then reconcile only in the foreground online.
-    await context.setOffline(true);await p.reload();await p.getByRole('button',{name:/Reopen prepared round/}).click();await p.locator('#scoreScreen.active').waitFor();
+    await context.setOffline(true);await p.reload();await p.getByRole('button',{name:/^Resume Group/}).click();await p.locator('#scoreScreen.active').waitFor();
     assert.equal((await p.evaluate(()=>V2Local.pending()))[0].operationId,before[0].operationId);
     // A tab interrupted mid-upload may retain the intentional 60-second lease.
     // Advance the fixture clock rather than depending on lease-release timing.
     await p.evaluate(()=>{const now=Date.now;Date.now=()=>now()+61000;});
-    holdWrites=false;await context.setOffline(false);await p.locator('#v2RetryLocal').click();await observe(p,async()=>(await V2Local.pending()).length===0);
+    holdWrites=false;await context.setOffline(false);await clickRecovery(p,'v2RetryLocal');await observe(p,async()=>(await V2Local.pending()).length===0);
     assert.equal(h.ctx.v2Rows('ScoreHistory').length,4);assert.deepEqual(errors,[]);
     assert.equal(await p.evaluate(()=>caches.has('flaghunters-stage1-feasibility-v1')),true);
     assert.equal(await p.evaluate(async()=>(await navigator.serviceWorker.getRegistrations()).some(r=>new URL(r.scope).pathname==='/offline-feasibility/')),true);
@@ -103,10 +103,15 @@ async function run(browser,label){
     const download=inspector.waitForEvent('download');await inspector.locator('#export').click();assert.equal((await download).suggestedFilename(),'flaghunters-offline-readiness.json');await inspector.close();
     console.log('PASS '+label+': read-only diagnostics report root worker/cache state, export safely and preserve caches/drafts/snapshots');
     await p.evaluate(async()=>{await new Promise((resolve,reject)=>{const r=indexedDB.deleteDatabase('flaghunters-v2-local');r.onsuccess=resolve;r.onerror=reject;});});
-    await context.setOffline(true);await p.reload();await p.locator('#v2PreparedGroups').filter({hasText:/storage may have been evicted/}).waitFor();
-    assert.equal(await p.getByRole('button',{name:/Reopen prepared round/}).count(),0);
+    await context.setOffline(true);await p.reload();await p.locator('#v2PreparedGroups').filter({hasText:/Reconnect to open a group/}).waitFor();
+    assert.equal(await p.getByRole('button',{name:/^Resume Group/}).count(),0);
     console.log('PASS '+label+': denied install, full offline reload/tab reopen, resume signals, private cache allowlist, waiting update, unchanged pending ID and foreground acceptance');
   }finally{await context.close();await new Promise(r=>server.close(r));}
+}
+async function clickRecovery(page,id){
+  const panel=page.locator('#v2ScoreRecovery');
+  if(!await panel.evaluate(el=>el.open))await panel.locator('summary').click();
+  await panel.locator('#'+id).click();
 }
 async function observe(page,fn){const deadline=Date.now()+20000;while(!await page.evaluate(fn)){if(Date.now()>deadline)throw Error('Browser observation timed out');await new Promise(r=>setTimeout(r,20));}}
 function locationOrigin(url){return new URL(url).origin;}

@@ -58,8 +58,45 @@ dialog input, dialog textarea { width:100%; box-sizing:border-box; margin:10px 0
 .v2-leaderboard abbr { text-decoration:none; }
 .v2-table-stb { font-weight:750; }
 
-.v2-local-status { max-width:600px; margin:12px auto; padding:12px 16px; border:1px solid #647667; border-radius:10px; background:#f2f6f2; box-sizing:border-box; }
-.v2-local-status button { margin:4px; padding:8px; }
+.v2-admin-link,.v2-text-button {
+  color:#24563b; background:transparent; border:0; padding:8px 10px; font-weight:650;
+  text-decoration:underline; text-underline-offset:3px; cursor:pointer;
+}
+.v2-admin-link { display:block; margin:8px auto 0; }
+.v2-play-status { font-size:.9rem; color:#365642; line-height:1.4; margin:6px 0; }
+.v2-attention { color:#85401f; font-weight:700; }
+#v2PreparedGroups { margin:8px 0; }
+#v2PreparedGroups button { display:block; }
+.v2-recovery-tools { margin-top:14px; color:#365642; border-top:1px solid #d8dfd8; font-size:.9rem; }
+.v2-recovery-tools summary { padding:12px 4px; min-height:44px; cursor:pointer; }
+.v2-recovery-tools button { border:1px solid #a5b6aa; background:white; color:#173c2b; padding:6px 10px; margin:3px; border-radius:8px; }
+.v2-filters { margin:0 0 12px; }
+.v2-filters label,#v2SeasonPanel label { display:block; color:#365642; font-size:.9rem; font-weight:650; margin:4px 0; }
+.v2-filters select,#v2SeasonPanel select {
+  width:100%; min-width:0; background:#fff; color:#173c2b; border:1px solid #a5b6aa;
+  border-radius:8px; padding:8px 10px; font:inherit; font-size:16px;
+}
+.v2-filters .secondary-button { margin-top:8px; }
+.v2-segments { display:flex; flex-wrap:wrap; gap:6px; margin:10px 0; }
+.v2-segments button {
+  flex:1 1 auto; border:1px solid #a5b6aa; border-radius:8px; padding:6px 8px;
+  color:#173c2b; background:#fff; font:inherit; font-size:.875rem; font-weight:650; cursor:pointer;
+}
+.v2-segments [aria-pressed=true] { color:white; background:#24563b; border-color:#24563b; }
+.v2-table-scroll { overflow-x:auto; margin-top:12px; }
+#v2SeasonPanel h2 { font-size:1.125rem; margin:0 0 8px; }
+.v2-season-table { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; font-size:.875rem; }
+.v2-season-table th,.v2-season-table td { padding:8px 5px; text-align:right; }
+.v2-season-table th:first-child { text-align:left; }
+.v2-season-table thead { background:#e5eee6; }
+.v2-season-table tbody tr:nth-child(even) { background:#f2f6f2; }
+.v2-season-table abbr { text-decoration:none; }
+.v2-eclectic-table { min-width:420px; }
+.v2-eclectic-table td:last-child { white-space:nowrap; }
+.v2-card-stats { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; text-align:center; }
+.v2-card-stats div { background:#f2f6f2; border-radius:8px; padding:8px 2px; }
+.v2-card-stats dt { font-size:.8rem; }
+.v2-card-stats dd { margin:3px 0 0; font-weight:700; }
 
 /* Recovery controls remain readable and tappable on a phone. */
 .v2-recovery-entry { padding:12px 0; border-bottom:1px solid #ccd7ce; overflow-wrap:anywhere; }
