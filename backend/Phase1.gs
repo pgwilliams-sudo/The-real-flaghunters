@@ -59,11 +59,15 @@ function v2Meta(eventId) {
   const row=v2Rows('RoundEventsV2').find(r=>String(r.event_id)===String(eventId));
   return row ? JSON.parse(row.data) : null;
 }
+function v2RoundLocked(event,meta) {
+  return meta ? Boolean(meta.revealed_at||meta.locked) :
+    String(event?.status).toLowerCase()==='complete'||isTrue(event?.completed);
+}
 function v2Writable(eventId) {
   v2AssertEnabled();
   const event=getEventById(eventId); if(!event) throw new Error('Event not found');
   const meta=v2Meta(eventId);
-  if(meta && (meta.revealed_at || meta.locked)) throw new Error('Results are permanently locked');
+  if(v2RoundLocked(event,meta)) throw new Error('Results are permanently locked');
   if(!['active','complete'].includes(String(event.status).toLowerCase())) throw new Error('Round cannot be edited');
   return meta;
 }
@@ -188,7 +192,7 @@ function getTeeData(event) {
 }
 function getCurrentEvent() {
   const event=legacyGetCurrentEvent(); if(!event) return event;
-  const meta=v2Meta(event.event_id); return {...event,schema_version:meta?2:1,locked:Boolean(meta&&(meta.locked||meta.revealed_at))};
+  const meta=v2Meta(event.event_id); return {...event,schema_version:meta?2:1,locked:v2RoundLocked(event,meta)};
 }
 function getGroups(eventId) {
   const groups=legacyGetGroups(eventId),meta=v2Meta(eventId); if(!meta) return groups;
@@ -218,7 +222,9 @@ function v2EnsureImmutableRow(table,operation,key,revision,data) {
   if(!existing.length) v2Append(table,[operation,key,revision,encoded]);
 }
 /** WAL recovery. PREPARED rows contain the complete validated result, never a credential secret. */
-function v2RecoverOperation(o) {
+function v2RecoverOperation(o,meta=v2Meta(o.payload.event_id)) {
+  // Status and review requests can recover accepted intents outside the scoring entry point.
+  if(!meta&&v2RoundLocked(getEventById(o.payload.event_id),meta)) throw Error('Results are permanently locked');
   o.payload.changes.forEach(c=>{
     v2EnsureImmutableRow('ScoresV2',o.operation_id,c.key,c.after.revision,c.after);
     v2EnsureImmutableRow('ScoreHistory',o.operation_id,c.key,c.after.revision,c);
@@ -228,7 +234,7 @@ function v2RecoverOperation(o) {
   SpreadsheetApp.flush();
 }
 function v2Recover(eventId) {
-  v2Operations(eventId).filter(o=>o.state==='PREPARED').forEach(v2RecoverOperation);
+  v2Operations(eventId).filter(o=>o.state==='PREPARED').forEach(o=>v2RecoverOperation(o));
 }
 function v2Save(data,actor) {return withScriptLock(()=>v2SaveLocked(data,actor));}
 function v2SaveLocked(data,actor,dryRun=false) {
@@ -284,7 +290,7 @@ function v2SaveLocked(data,actor,dryRun=false) {
     if(dryRun)return result;
     v2Append('ScoreOperations',[data.operationId,'PREPARED',JSON.stringify(payload)]);
     SpreadsheetApp.flush();
-    v2RecoverOperation({operation_id:data.operationId,data:JSON.stringify(payload),payload});
+    v2RecoverOperation({operation_id:data.operationId,data:JSON.stringify(payload),payload},meta);
     return result;
 }
 /** Authenticated reconciliation of an immutable request, including after reveal/rotation.
@@ -332,9 +338,11 @@ function v2ReviewOperation(data,actor) {
   return withScriptLock(()=>{
     const status=v2StatusRead(data,actor,true),event=getEventById(data.eventId);
     if(!event)throw Error('Old round is unavailable on this backend; retain/export its local records');
+    const meta=v2Meta(data.eventId);
+    if(!meta&&v2RoundLocked(event,meta)) throw Error('Results are permanently locked');
     v2Recover(String(data.eventId));
     const ids=(data.scores||[]).map(s=>String(s.playerId));
-    return {...status,meta:v2Meta(data.eventId),scores:getScores(data.eventId).filter(s=>ids.includes(String(s.player_id))&&Number(s.hole)===Number(data.hole))};
+    return {...status,meta,scores:getScores(data.eventId).filter(s=>ids.includes(String(s.player_id))&&Number(s.hole)===Number(data.hole))};
   });
 }
 function v2ResolveOperation(data,actor) {

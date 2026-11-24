@@ -97,9 +97,32 @@ const {chromium}=require('playwright'),{harness}=require('./harness.cjs');
   const starts=calls.filter(c=>c.action==='startRound');assert.equal(starts.length,2);assert.deepEqual(starts[0],starts[1]);
   assert.equal(h.ctx.v2Meta(eventId).started_at,started);
   assert.equal(h.sheets.get('Competitions').rows.filter(r=>r[0]===eventId).length,1);
+  console.log('PASS Stage 7: configurable PIN mode, hidden dormant PIN controls, duplicate setup guards, lost-response retry, Saved confirmation and Home');
+
+  // A workbook with only completed rounds falls back to the most recent result.
+  const legacyEvent='legacy-event';
+  for(const event of events.slice(1))event[4]='complete';
+  events.push(events.splice(events.findIndex(event=>event[0]===legacyEvent),1)[0]);
+  h.sheets.get('Groups').rows.push([legacyEvent,1,'p1',1,true,1,1,true]);
+  h.sheets.get('Scores').rows.push([legacyEvent,'p1',18,8,7,0,true,false,false,'legacy']);
+  await p.close();p=await open();
+  await p.waitForFunction(()=>currentEvent?.event_id==='legacy-event'&&currentEvent.locked);
+  await p.getByRole('button',{name:/Live Leaderboard/}).click();
+  await p.getByText('Player 1',{exact:true}).click();
+  const lastHole=p.locator('tr[data-hole="18"]');
+  await lastHole.waitFor();
+  assert.equal(await lastHole.locator('td').nth(2).textContent(),'8');
+  await p.locator('#v2Close').click();
+  await p.evaluate(()=>showScreen('homeScreen'));
+  await p.getByRole('button',{name:/Enter Scores/}).click();
+  const locked=p.waitForEvent('dialog');
+  await p.locator('.group-button').first().click();
+  assert.match((await locked).message(),/permanently locked/);
+  assert.equal(await p.locator('#scoreScreen.active').count(),0);
+  console.log('PASS completed legacy round: original score remains visible and PIN-free scoring cannot open');
+
   assert.deepEqual(errors,[]);
   assert.deepEqual(unexpectedRequests,[]);
   if(publicTest)console.log('PASS Stage 8: packaged frontend ignored alternate stored endpoint and contacted only the pinned test endpoint');
-  console.log('PASS Stage 7: configurable PIN mode, hidden dormant PIN controls, duplicate setup guards, lost-response retry, Saved confirmation and Home');
  }finally{await context.close();await browser.close();await new Promise(r=>server.close(r));}
 })().catch(error=>{console.error(error);process.exitCode=1;});

@@ -97,8 +97,9 @@ test('V2 write disable and default UI endpoint fail closed',()=>{
 test('GET competition reads are side-effect free, including missing helper sheets',()=>{
   const h=harness(),count=h.sheets.size,writes=h.writes;const r=h.ctx.doGet({parameter:{action:'competitions',eventId:'v2-event'}});assert.equal(r.ok,true);assert.equal(h.sheets.size,count);assert.equal(h.writes,writes);
 });
-test('historical numeric corrections are audited without inventing snapshots or rewriting legacy scores',()=>{
+test('active legacy numeric corrections are audited without inventing snapshots or rewriting legacy scores',()=>{
   const h=harness();h.sheets.get('Groups').rows.push(['legacy-event',1,'p1',1,true,1,1,true]);h.sheets.get('Scores').rows.push(['legacy-event','p1',1,5,4,2,false,false,false,'old']);
+  h.sheets.get('Events').rows[2].splice(4,2,'active',false);
   const issued=h.post({action:'issueGroupCredential',credential:h.admin,eventId:'legacy-event',groupNo:1});assert.equal(issued.ok,true);
   const session=h.post({action:'openGroup',eventId:'legacy-event',groupNo:1,pin:issued.pin});
   const scores=[{playerId:'p1',status:'scored',gross:4,expectedRevision:0}];assert.match(h.save({credential:session.token,eventId:'legacy-event',scores}).error,/reason/);
